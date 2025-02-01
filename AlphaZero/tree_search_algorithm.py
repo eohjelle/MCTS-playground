@@ -13,14 +13,6 @@ class State(ABC):
     def childStates(self) -> List['State']:
         pass
 
-# A predictor predicts the policy and value of a state. 
-# Examples: Deep learning model, Monte Carlo predictor
-class Predictor(ABC):
-    @abstractmethod
-    def predict(self, state: State) -> Tuple[float, float]:
-        # Returns (policy, value)
-        pass
-
 # Node is a node in the search tree. 
 class Node:
     def __init__(self, parent: Optional['Node'], children: List['Node'], value: int, policy: Optional[Dict['Node', float]], state: State):
@@ -34,14 +26,37 @@ class Node:
     def isLeaf(self) -> bool:
         return len(self.children) == 0
 
+# A Selector selects a child node from a node, used to travel from the root to a leaf node in the tree search algorithm.
+# Examples: UCT selector, random selector
+class Selector(ABC):
+    @abstractmethod
+    def select(self, node: Node) -> Node:
+        pass
+
+# An Evaluator provides the prior policy and value of a state. 
+# Examples: Deep learning model, Monte Carlo evaluator
+class Evaluator(ABC):
+    @abstractmethod
+    def evaluate(self, state: State) -> Tuple[float, float]:
+        # Returns (value, policy)
+        pass
+
+class UCTSelector(Selector):
+    def select(self, node: Node) -> Node:
+        # TODO: Use better UCT formula
+        def UCT(node: Node) -> float:
+            return node.value + node.parent.policy[node] * math.sqrt(math.log(node.parent.visitCount + 1) / (node.visitCount + 1))
+        return max(node.children, key=UCT)
+
 class TreeSearchAlgorithm:
-    def __init__(self, root: Node, predictor: Predictor):
+    def __init__(self, root: Node, evaluator: Evaluator, selector: Selector = UCTSelector()):
         self.root = root
-        self.predictor = predictor
+        self.selector = selector
+        self.evaluator = evaluator
     
     # Run the tree search algorithm numIterations times and return an action
     # TODO: Return the policy, not just the action
-    def run(self, numIterations: int, temperature: float = 1.0):
+    def run(self, numIterations: int, temperature: float = 1.0) -> Dict[Node, float]:
         for _ in range(numIterations):
             self.treeSearchIteration()
         
@@ -61,13 +76,9 @@ class TreeSearchAlgorithm:
         self.backpropagate(leaf)
 
     def select(self) -> Node:
-        # TODO: Use better UCT formula
-        def UCT(node: Node) -> float:
-            return node.value + node.parent.policy[node] * math.sqrt(math.log(node.parent.visitCount + 1) / (node.visitCount + 1))
-
         node = self.root
         while not node.isLeaf():
-            node = max(node.children, key=UCT)
+            node = self.selector.select(node)
         return node
     
     def expand(self, node: Node):
@@ -79,7 +90,7 @@ class TreeSearchAlgorithm:
         if node.state.terminal:
             node.value = node.state.value
         else:
-            node.policy, node.value = self.predictor.predict(node.state)
+            node.policy, node.value = self.evaluator.evaluate(node.state)
 
     def backpropagate(self, node: Node, value: float):
         while node is not None:

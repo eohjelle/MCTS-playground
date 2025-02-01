@@ -1,5 +1,5 @@
 import unittest
-from AlphaZero.tree_search_algorithm import State, Predictor, Node, TreeSearchAlgorithm
+from AlphaZero.tree_search_algorithm import State, Selector, Evaluator, Node, TreeSearchAlgorithm, UCTSelector
 
 # Dummy implementations for testing
 
@@ -23,11 +23,9 @@ class NonTerminalState(State):
         # Return a list of TerminalState objects with given values
         return [TerminalState(val) for val in self.children_values]
 
-class FakePredictor(Predictor):
-    def predict(self, state: State):
-        # For a non terminal state, return an arbitrary dummy policy and value.
-        # The policy returned here is intended to be a dict mapping child Node -> probability.
-        # In our tests we will not use the policy dict in UCT since tests call evaluate directly.
+class FakeEvaluator(Evaluator):
+    def evaluate(self, state: State):
+        # For a non-terminal state, return a dummy policy and value.
         # For simplicity, return an empty dict and an arbitrary value.
         return ({}, 3.14)
 
@@ -36,9 +34,9 @@ class TestTreeSearch(unittest.TestCase):
         # Create a terminal state with a known value and evaluate its node.
         term = TerminalState(value=42)
         node = Node(parent=None, children=[], value=0, policy=None, state=term)
-        # Create a dummy predictor (won't be used because state is terminal)
-        predictor = FakePredictor()
-        tree = TreeSearchAlgorithm(root=node, predictor=predictor)
+        # Create a dummy evaluator (won't be used because state is terminal)
+        evaluator = FakeEvaluator()
+        tree = TreeSearchAlgorithm(root=node, evaluator=evaluator)
         tree.evaluate(node)
         # Expect that node.value is set to the terminal state's value.
         self.assertEqual(node.value, 42)
@@ -47,20 +45,20 @@ class TestTreeSearch(unittest.TestCase):
         # Create a non-terminal state.
         non_term = NonTerminalState()
         node = Node(parent=None, children=[], value=0, policy=None, state=non_term)
-        predictor = FakePredictor()
-        tree = TreeSearchAlgorithm(root=node, predictor=predictor)
+        evaluator = FakeEvaluator()
+        tree = TreeSearchAlgorithm(root=node, evaluator=evaluator)
         tree.evaluate(node)
-        # Expect that evaluate uses the predictor value.
+        # Expect that evaluate uses the evaluator value.
         self.assertEqual(node.value, 3.14)
-        # And that the policy has been set (even if empty in this fake predictor)
+        # And that the policy has been set (even if empty in this fake evaluator)
         self.assertEqual(node.policy, {})
 
     def test_expand(self):
         # Create a non-terminal state that returns two terminal child states with values 1 and 2.
         non_term = NonTerminalState(children_values=[1, 2])
         node = Node(parent=None, children=[], value=0, policy=None, state=non_term)
-        predictor = FakePredictor()
-        tree = TreeSearchAlgorithm(root=node, predictor=predictor)
+        evaluator = FakeEvaluator()
+        tree = TreeSearchAlgorithm(root=node, evaluator=evaluator)
         tree.expand(node)
         # After expansion, number of children should equal number of child states.
         self.assertEqual(len(node.children), 2)
@@ -77,10 +75,10 @@ class TestTreeSearch(unittest.TestCase):
         # Manually add the child to the parent's children list.
         parent_node.children.append(child_node)
         
-        predictor = FakePredictor()
-        tree = TreeSearchAlgorithm(root=parent_node, predictor=predictor)
+        evaluator = FakeEvaluator()
+        tree = TreeSearchAlgorithm(root=parent_node, evaluator=evaluator)
         
-        # Perform backpropagation starting from the child.
+        # Perform backpropagation starting from the child node.
         tree.backpropagate(child_node, 10)
         
         # The backpropagation loop updates the starting node and its ancestors.
@@ -90,6 +88,64 @@ class TestTreeSearch(unittest.TestCase):
         # Then parent's visitCount will also be incremented by 1 and its value set to 10.
         self.assertEqual(parent_node.visitCount, 1)
         self.assertEqual(parent_node.value, 10)
+
+    def test_UCTSelector(self):
+        import math
+        # Set up a parent node with a dummy non-terminal state
+        parent_state = NonTerminalState()
+        parent_node = Node(parent=None, children=[], value=0, policy={}, state=parent_state)
+
+        # Create two child nodes with dummy terminal states
+        child1_state = TerminalState(1)
+        child2_state = TerminalState(2)
+        child1 = Node(parent=parent_node, children=[], value=10, policy=None, state=child1_state)
+        child2 = Node(parent=parent_node, children=[], value=20, policy=None, state=child2_state)
+
+        # Set visit counts for children and parent
+        child1.visitCount = 5
+        child2.visitCount = 10
+        parent_node.visitCount = 15
+
+        # Set parent's policy mapping for each child
+        parent_node.policy[child1] = 0.5
+        parent_node.policy[child2] = 0.8
+
+        # Attach the children to the parent node
+        parent_node.children.extend([child1, child2])
+
+        # Instantiate UCTSelector and select a child
+        selector = UCTSelector()
+        selected_child = selector.select(parent_node)
+
+        # Manually compute the UCT scores for each child
+        uct1 = child1.value + parent_node.policy[child1] * math.sqrt(math.log(parent_node.visitCount + 1) / (child1.visitCount + 1))
+        uct2 = child2.value + parent_node.policy[child2] * math.sqrt(math.log(parent_node.visitCount + 1) / (child2.visitCount + 1))
+        expected_child = child1 if uct1 > uct2 else child2
+
+        # Assert that the selector returns the child with the maximum UCT value
+        self.assertEqual(selected_child, expected_child)
+
+    def test_selector_instantiation(self):
+        # Test that instantiating the abstract Selector directly raises a TypeError.
+        with self.assertRaises(TypeError):
+            Selector()
+
+    def test_dummy_selector(self):
+        # Create a dummy concrete implementation of Selector that always selects the first child.
+        class DummySelector(Selector):
+            def select(self, node: Node) -> Node:
+                return node.children[0] if node.children else None
+
+        # Set up a parent node with two children.
+        dummy_state = TerminalState(0)
+        parent = Node(parent=None, children=[], value=0, policy={}, state=dummy_state)
+        child1 = Node(parent=parent, children=[], value=1, policy=None, state=TerminalState(1))
+        child2 = Node(parent=parent, children=[], value=2, policy=None, state=TerminalState(2))
+        parent.children.extend([child1, child2])
+
+        dummy_selector = DummySelector()
+        selected_child = dummy_selector.select(parent)
+        self.assertEqual(selected_child, child1)
 
 if __name__ == '__main__':
     unittest.main() 
