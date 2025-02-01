@@ -1,5 +1,5 @@
 import unittest
-from AlphaZero.tree_search import State, Predictor, Node, TreeSearch
+from AlphaZero.tree_search_algorithm import State, Predictor, Node, TreeSearchAlgorithm
 
 # Dummy implementations for testing
 
@@ -38,7 +38,7 @@ class TestTreeSearch(unittest.TestCase):
         node = Node(parent=None, children=[], value=0, policy=None, state=term)
         # Create a dummy predictor (won't be used because state is terminal)
         predictor = FakePredictor()
-        tree = TreeSearch(root=node, predictor=predictor)
+        tree = TreeSearchAlgorithm(root=node, predictor=predictor)
         tree.evaluate(node)
         # Expect that node.value is set to the terminal state's value.
         self.assertEqual(node.value, 42)
@@ -48,7 +48,7 @@ class TestTreeSearch(unittest.TestCase):
         non_term = NonTerminalState()
         node = Node(parent=None, children=[], value=0, policy=None, state=non_term)
         predictor = FakePredictor()
-        tree = TreeSearch(root=node, predictor=predictor)
+        tree = TreeSearchAlgorithm(root=node, predictor=predictor)
         tree.evaluate(node)
         # Expect that evaluate uses the predictor value.
         self.assertEqual(node.value, 3.14)
@@ -60,7 +60,7 @@ class TestTreeSearch(unittest.TestCase):
         non_term = NonTerminalState(children_values=[1, 2])
         node = Node(parent=None, children=[], value=0, policy=None, state=non_term)
         predictor = FakePredictor()
-        tree = TreeSearch(root=node, predictor=predictor)
+        tree = TreeSearchAlgorithm(root=node, predictor=predictor)
         tree.expand(node)
         # After expansion, number of children should equal number of child states.
         self.assertEqual(len(node.children), 2)
@@ -78,7 +78,7 @@ class TestTreeSearch(unittest.TestCase):
         parent_node.children.append(child_node)
         
         predictor = FakePredictor()
-        tree = TreeSearch(root=parent_node, predictor=predictor)
+        tree = TreeSearchAlgorithm(root=parent_node, predictor=predictor)
         
         # Perform backpropagation starting from the child.
         tree.backpropagate(child_node, 10)
