@@ -40,6 +40,7 @@ class TreeSearchAlgorithm:
         self.predictor = predictor
     
     # Run the tree search algorithm numIterations times and return an action
+    # TODO: Return the policy, not just the action
     def run(self, numIterations: int, temperature: float = 1.0):
         for _ in range(numIterations):
             self.treeSearchIteration()
