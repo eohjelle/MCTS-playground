@@ -139,6 +139,7 @@ Since the publication of AlphaZero, deep learning models based on the transforme
 - Thompson sampling seems to perform better than UCB algorithms for some MAB-problems, according to the experimental results of [this paper](https://proceedings.neurips.cc/paper_files/paper/2011/file/e53a0a2978c28872a4505bdb51db06dc-Paper.pdf). Is it possible to come up with a Bayesian updating scheme for the tree search algorithm? I explore this question in [[Bayesian tree search]]. Some related papers:
 	- [Thompson sampling for MCTS](https://proceedings.neurips.cc/paper_files/paper/2013/file/846c260d715e5b854ffad5f70a516c88-Paper.pdf). They call their algorithm DNG-MCTS, which at the time of writing gave state-of-the-art performance. 
 	- [A Bayesian approach to online planning](https://arxiv.org/abs/2406.02103v1). This paper discusses Bayesian inference for use in AlphaZero.
+	- Suggestion: [[Dirichlet AlphaZero]]
 
 # References
 
