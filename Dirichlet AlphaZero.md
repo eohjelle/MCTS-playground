@@ -157,6 +157,22 @@ $$
 
 where $\Gamma$ is the gamma function and $\psi$ is the digamma function $\psi(x)=\frac{d}{dx}\ln(\Gamma(x))$. ==ChatGPT told me about this formula so we should check if it's true.==
 
+## Comparison to AlphaZero
+
+In the end the algorithm relies on keeping track of some numbers $\alpha_i$ and $\beta_i$, going to leaf nodes, sampling outcomes, and keeping count of aggregate outcomes for each action. This end result feels pretty close to AlphaZero, so it's worth pointing out what the actual differences are. 
+
+There are a few minor differences:
+
+- We keep track of entire distributions of outcomes, and not just a summary statistic (expected value of outcome). 
+- The prior (neural net predicted) policies are continually updated and used directly for selection.
+- The updated policy Dirichlet parameters (or some derivative of them) are also used as targets for the output policy Dirichlet parameters of the neural net. 
+
+It's a bit difficult to say exactly what the net effect of these differences are.
+
+A more major difference is the choice of loss function. This could possibly have a larger effect. 
+
+In the end we'll have to test both approaches in order to compare them. 
+
 ## Policy updating methods
 
 In the previous section, we introduced a _Dirichlet tree search algorithm_ in which each node maintains Dirichlet parameters \(\alpha(s)\) for the policy distribution and \(\beta(s)\) for the outcome distribution. During **backpropagation**, we do a simple **Dirichlet increment** rule such as:
