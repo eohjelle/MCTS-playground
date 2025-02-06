@@ -39,7 +39,11 @@ The Bayesian way is to put a _prior_ on the value of $t$, say the _uniform prior
 $$ p(t | T) \propto p(t) p(T | t) = 1 \cdot t = t . $$
 
 More generally, if you throw the coin and end up with $m$ tails and $n$ heads, you'll find that
-$$ p(t | \text{``}m T + nH\text{''}) \propto t^m (1-t)^n . $$
+
+$$
+p(t | \text{``}m T + nH\text{''}) \propto t^m (1-t)^n .
+$$
+
 This distribution has a name, it is the beta distribution $\text{Beta}(m+1, n+1)$.
 
 As we've seen, the Beta distribution has a pleasing relation to Bernoulli trials, and arises naturally as a _distribution of categorical distributions with two outcomes_. Formally, it is a conjugate prior for the case when the likelihood function is a categorical distribution with two outcomes. 
@@ -49,7 +53,11 @@ As we've seen, the Beta distribution has a pleasing relation to Bernoulli trials
 The Dirichlet distribution is a generalization of the Beta distribution to the case where you're dealing with experiments with more than two (but still finite) number of outcomes. Let's consider $\text{Dirichlet}(\alpha_1,\dots,\alpha_k)$, corresponding to the case with $k$ outcomes. If $\theta$ is sampled from this distribution, then $\theta$ describes a probability distribution for an experiment with $k$ outcomes, in the sense that each $\theta_i \geq 0$ and $\sum_i \theta_i = 1$. 
 
 If we consider an experiment $X$ with $k$ outcomes, and likelihood function $P(X=i | \theta) = \theta_i$, the the Dirichlet distribution is the conjugate prior. If we do an experiment and observe $X = i$, then the posterior
-$$ \theta | X = i \sim \text{Dirichlet}(\alpha_1,\dots,\alpha_i + 1, \dots, \alpha_k) . $$
+
+$$
+\theta | X = i \sim \text{Dirichlet}(\alpha_1,\dots,\alpha_i + 1, \dots, \alpha_k) . 
+$$
+
 That is, just like for the Beta distribution, it has the nice property that the posterior update for a single observation just increments the corresponding parameter by $1$. This makes Bayesian inference convenient.
 
 ## Thompson sampling shortcut
@@ -125,8 +133,11 @@ We will see some alternative policy updating methods in [[#Policy updating metho
 ### The loss function
 
 We train the neural net to predict the resulting $\alpha(s)$ and $\beta(s)$ at the root node $s$ as close as possible, after they have been refined by iterating the tree search algorithm. The Dirichlet parameters describe distributions, to the most natural metric to use is the KL divergence ==correct direction?==
+
 $$
-L(\theta) = D_{\text{KL}}\left( \text{Dirichlet}(\alpha^{\text{NN}}(s)) \Vert \text{Dirichlet}(\alpha(s)) \right) + D_{\text{KL}}\left( \text{Dirichlet}(\beta^{\text{NN}}(s)) \Vert \text{Dirichlet}(\beta(s)) \right) , $$
+L(\theta) = D_{\text{KL}}\left( \text{Dirichlet}(\alpha^{\text{NN}}(s)) \Vert \text{Dirichlet}(\alpha(s)) \right) + D_{\text{KL}}\left( \text{Dirichlet}(\beta^{\text{NN}}(s)) \Vert \text{Dirichlet}(\beta(s)) \right) , 
+$$
+
 which up to a constant equals the cross-entropy.
 
 As it turns out, there is a nice closed form for the KL divergence of two Dirichlet distributions. $\alpha,\beta \in \mathbb{R}_{>0}^k$, define $\alpha_0 = \sum_i \alpha_i$ and $\beta_0 = \sum_i \beta_i$. Then
@@ -150,6 +161,7 @@ $$
   \alpha(s)_a \;\leftarrow\; 
   \max\bigl(\alpha(s)_a + \Delta(o'),\, \epsilon\bigr),
 $$
+
 for the action $a$ that led to outcome $o'$. This is a **heuristic** approach: we interpret a positive $\Delta$ for “good outcomes,” a negative $\Delta$ for “bad outcomes,” and so on. But it is *not* a purely Bayesian update in the sense of “the environment’s likelihood times a prior.” Instead, it’s more of a bandit-like **credit assignment** method that shifts probability mass to actions with better observed outcomes.
 
 Below, we discuss variations and alternatives.
@@ -171,9 +183,11 @@ One can see this as “**Bayesian-ish**” but the increment sizes $\Delta(o')$ 
 
 2. **Partial or decaying increments**  
    - Instead of adding/subtracting exactly 1, you can use a fraction $\eta$ (like 0.1 or 0.5) or a decaying schedule. For example:  
+   
      $$
        \alpha_a \;\leftarrow\; \alpha_a + \eta \,\Delta(o'),
      $$
+     
      and $\eta$ might decrease over time or with the node’s visit count. This controls how quickly the distribution saturates around a single action.
 
 3. **Using an aggregate $\alpha_{\mathrm{avg}}$ instead of $\alpha_{\mathrm{search}}$**  
@@ -199,6 +213,7 @@ When outcome $o'$ is observed, you update the chosen action’s weight multiplic
 $$
   w_a \;\leftarrow\; w_a \,\exp\bigl(\eta \, \mathrm{score}(o')\bigr).
 $$
+
 Here, $\mathrm{score}(o')$ could be +1 for a win, -1 for a loss, or some bounded reward. This is conceptually close to Dirichlet increments—except the update is _multiplicative_ rather than _additive_. Both methods shift probability toward more successful actions over repeated visits.
 
 #### One action dominating
@@ -206,10 +221,9 @@ Here, $\mathrm{score}(o')$ could be +1 for a win, -1 for a loss, or some bounded
 In exponential weights, a single action’s $w_a$ can grow exponentially large if it gets a run of positive outcomes—potentially hurting exploration. A standard fix is:
 
 $$
-  p(a) 
-  = 
-  (1 - \gamma)\,\frac{w_a}{\sum_b w_b} \;+\; \frac{\gamma}{|A|},
+p(a) = (1 - \gamma)\,\frac{w_a}{\sum_b w_b} \;+\; \frac{\gamma}{|A|},
 $$
+
 ensuring each action has at least probability $\gamma / |A|$. That’s the typical “**exploration term**” in Exp3. Similarly, in **Dirichlet increments**, you might keep a small positive offset or partial increments to avoid vanishingly small $\alpha_a$.
 
 ### Pros and cons: Dirichlet increments vs exponential weights
