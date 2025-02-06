@@ -63,7 +63,11 @@ That is, just like for the Beta distribution, it has the nice property that the 
 ## Thompson sampling shortcut
 
 If $\theta \sim \text{Dirichlet}(\alpha_1,\dots,\alpha_k)$ and $X \sim \theta$, then we know by definition that $P(X = i | \theta) = \theta_i$. The nice thing is that the marginal distribution of $X$ has a nice expression 
-$$ P(X=i) = \alpha_i / \sum_j \alpha_j . $$ 
+
+$$
+P(X=i) = \alpha_i / \sum_j \alpha_j .
+$$
+
 This leads to a useful shortcut for _Thompson sampling_: To sample $\theta$ and then $X$ is to sample $X$ directly from the distribution $P(X=i) \propto \alpha_i$. 
 
 Note also that $E [ \theta_i ] = \alpha_i / \sum_{j} \alpha_j$. 
@@ -123,7 +127,7 @@ Again, use the shortcut to reduce this to one easier step:
 
 The observed outcome $o'$ is backpropagated to each ancestor node $s$ as follows:
 
-1. _Outcome update_. Increment $\beta(s)_{o'} \leftarrow \beta(s)_{o'} + 1$. This is the usual way to update a Dirichlet conjugate prior for categorical outcomes. 
+1. _Outcome update_. Increment $\beta(s)_{o'} \leftarrow \beta(s)_{o'} + 1.$ This is the usual way to update a Dirichlet conjugate prior for categorical outcomes. 
 2. _Policy update_. Here we simply use a heuristic "Dirichlet increment". For certain "increment values" $\Delta(o')$, e. g. $\Delta(\text{loss}) = -1$, $\Delta(\text{draw}) = 0$, $\Delta(\text{win}) = 1$, we might increment $\alpha(s)_a \leftarrow \max(\alpha(s)_a + \Delta(o'), \epsilon)$. The max value here is just to avoid negative values. 
 
 In this way, actions that yield consistently good outcomes accumulate large $\alpha_a$, whereas actions that yield poor outcomes get penalized, letting their $\alpha_a$ remain small. In addition, choosing actions that lead to good outcomes increase $\sum_a \alpha_a$, leading to more certainty, whereas choosing actions that lead bad comes decrease $\sum_a \alpha_a$, leading to more uncertainty. 
@@ -182,13 +186,7 @@ One can see this as “**Bayesian-ish**” but the increment sizes $\Delta(o')$ 
    - One must be careful not to push $\alpha_a$ below $\epsilon > 0$, or we’d violate the positivity requirement for Dirichlet parameters.
 
 2. **Partial or decaying increments**  
-   - Instead of adding/subtracting exactly 1, you can use a fraction $\eta$ (like 0.1 or 0.5) or a decaying schedule. For example:  
-   
-     $$
-       \alpha_a \;\leftarrow\; \alpha_a + \eta \,\Delta(o'),
-     $$
-     
-     and $\eta$ might decrease over time or with the node’s visit count. This controls how quickly the distribution saturates around a single action.
+   - Instead of adding/subtracting exactly 1, you can use a fraction $\eta$ (like 0.1 or 0.5) or a decaying schedule. For example:  $\alpha_a \;\leftarrow\; \alpha_a + \eta \,\Delta(o')$, and $\eta$ might decrease over time or with the node’s visit count. This controls how quickly the distribution saturates around a single action.
 
 3. **Using an aggregate $\alpha_{\mathrm{avg}}$ instead of $\alpha_{\mathrm{search}}$**  
    - You can keep two sets of Dirichlet parameters at each node:  
@@ -201,9 +199,7 @@ One can see this as “**Bayesian-ish**” but the increment sizes $\Delta(o')$ 
 Another classical approach from **multi-armed bandits** is the **exponential weights** update (Exp3, Hedge, etc.). At each node $s$, you keep **weights** $w_a>0$. To pick an action, you sample:
 
 $$
-  p(a) 
-  = 
-  \frac{w_a}{\sum_b w_b}.
+p(a) = \frac{w_a}{\sum_b w_b}.
 $$
 
 Note that if we identify $w_a = \alpha_a$, this _precisely_ corresponds to how we choose actions in the above specification, because of the [[#Thompson sampling shortcut]].
