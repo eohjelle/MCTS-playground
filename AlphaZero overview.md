@@ -102,7 +102,7 @@ The following numbers are attached to each edge $(s, a)$ in the (known) game tre
 
 The tree search algorithm is as follows, run for as many iterations as the allotted time allows:
 
-1. **Selection**: Starting from the root node $s^0$, successively choose moves $(s^0, a^0), (s^1, a^1), \dots$ until a leaf node $(s^l, a^l)$ is encountered. Selection of the next edge is done according to a UCT rule $$ a^k = \operatorname{argmax}_a Q(s^k, a) + U(s^k, a) , $$ where $U(s, a)$ is a function that boosts under-explored edges proportionally to the prior probability $P(s, a)$. Specifically, some candidates for $U(s, a)$ are $$\begin{aligned} & U(s, a) = P(s, a) \frac{1}{1 + N(s, a)} c & \text{(used in AlphaGo Zero), } \\ & U(s, a) = P(s, a) \frac{\sqrt{\sum_b N(s, b)}}{1 + N(s, a)} \left( c_1 + \log \left( \frac{\sum_b N(s, b) + c_2 + 1}{c_2} \right) \right) & \text{(used in MuZero), } \end{aligned}$$ where $c, c_1, c_2$ are constants; in fact $c_1 = 1.25$ and $c_2 = 19652$ in MuZero (see page 12 in the paper).
+1. **Selection**: Starting from the root node $s^0$, successively choose moves $(s^0, a^0), (s^1, a^1), \dots$ until a leaf node $(s^l, a^l)$ is encountered. Selection of the next edge is done according to a UCT rule $$ a^k = \operatorname{argmax}\_a Q(s^k, a) + U(s^k, a) , $$ where $U(s, a)$ is a function that boosts under-explored edges proportionally to the prior probability $P(s, a)$. Specifically, some candidates for $U(s, a)$ are $$\begin{aligned} & U(s, a) = P(s, a) \frac{1}{1 + N(s, a)} c & \text{(used in AlphaGo Zero), } \\ & U(s, a) = P(s, a) \frac{\sqrt{\sum_b N(s, b)}}{1 + N(s, a)} \left( c_1 + \log \left( \frac{\sum_b N(s, b) + c_2 + 1}{c_2} \right) \right) & \text{(used in MuZero), } \end{aligned}$$ where $c, c_1, c_2$ are constants; in fact $c_1 = 1.25$ and $c_2 = 19652$ in MuZero (see page 12 in the paper).
 2. **Expansion and evaluation**: After reaching the leaf node $s^l$, invoke the function $f_\theta$ to compute $\mathbf{p}^l, v^l = f_\theta(s^l)$. The child nodes of $s^l$ are added to the tree, each edge being initialized with $N(s^l, a) = 0$, $Q(s^l, a) = 0$, $P(s^l, a) = \mathbf{p}^l_a$.
 3. **Backpropagation**: The visit counts are incremented and expected rewards updated. Specifically, using the following assignments: $$\begin{aligned} & N(s^k, a^k) \leftarrow N(s^k, a^k) + 1 & \text{for }k = 0, 1, \dots, l-1, \\ & Q(s^k, a^k) \leftarrow \frac{(N(s^k, a^k) -1)Q(s^k, a^k) + v^l}{N(s^k, a^k)} & \text{for }k = 0, 1, \dots, l-1. \end{aligned}$$
 
@@ -137,9 +137,9 @@ Since the publication of AlphaZero, deep learning models based on the transforme
 - What improvements not listed here are implemented by Leela Chess zero or the Chess-former paper?
 - What other sources may have made further improvements to the model?
 - Thompson sampling seems to perform better than UCB algorithms for some MAB-problems, according to the experimental results of [this paper](https://proceedings.neurips.cc/paper_files/paper/2011/file/e53a0a2978c28872a4505bdb51db06dc-Paper.pdf). Is it possible to come up with a Bayesian updating scheme for the tree search algorithm? I explore this question in [[Bayesian tree search]]. Some related papers:
-	- [Thompson sampling for MCTS](https://proceedings.neurips.cc/paper_files/paper/2013/file/846c260d715e5b854ffad5f70a516c88-Paper.pdf). They call their algorithm DNG-MCTS, which at the time of writing gave state-of-the-art performance. 
-	- [A Bayesian approach to online planning](https://arxiv.org/abs/2406.02103v1). This paper discusses Bayesian inference for use in AlphaZero.
-	- Suggestion: [[Dirichlet AlphaZero]]
+  - [Thompson sampling for MCTS](https://proceedings.neurips.cc/paper_files/paper/2013/file/846c260d715e5b854ffad5f70a516c88-Paper.pdf). They call their algorithm DNG-MCTS, which at the time of writing gave state-of-the-art performance.
+  - [A Bayesian approach to online planning](https://arxiv.org/abs/2406.02103v1). This paper discusses Bayesian inference for use in AlphaZero.
+  - Suggestion: [[Dirichlet AlphaZero]]
 
 # References
 

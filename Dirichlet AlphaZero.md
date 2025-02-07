@@ -144,7 +144,9 @@ $$
 
 which up to a constant equals the cross-entropy.
 
-As it turns out, there is a nice closed form for the KL divergence of two Dirichlet distributions. $\alpha,\beta \in \mathbb{R}_{>0}^k$, define $\alpha_0 = \sum_i \alpha_i$ and $\beta_0 = \sum_i \beta_i$. Then
+As it turns out, there is a nice closed form for the KL divergence of two Dirichlet distributions. $\alpha,\beta \in \mathbb{R}_{>0}^k$, define $\alpha_0 = \sum_i \alpha_i$ and $\beta_0 = \sum_i \beta_i$. Then[^5]
+
+[^5]: Reference: https://statproofbook.github.io/P/dir-kl.html
 
 $$
 D_{\mathrm{KL}}\bigl(\mathrm{Dir}(\alpha)\,\|\,\mathrm{Dir}(\beta)\bigr)
@@ -155,7 +157,9 @@ D_{\mathrm{KL}}\bigl(\mathrm{Dir}(\alpha)\,\|\,\mathrm{Dir}(\beta)\bigr)
 \sum_{i=1}^k (\alpha_i-\beta_i)\,\bigl[\psi(\alpha_i)\;-\;\psi(\alpha_0)\bigr],
 $$
 
-where $\Gamma$ is the gamma function and $\psi$ is the digamma function $\psi(x)=\frac{d}{dx}\ln(\Gamma(x))$. ==ChatGPT told me about this formula so we should check if it's true.==
+where $\Gamma$ is the gamma function and $\psi$ is the digamma function $\psi(x)=\frac{d}{dx}\ln(\Gamma(x))$. 
+
+
 
 ## Comparison to AlphaZero
 
@@ -175,25 +179,25 @@ In the end we'll have to test both approaches in order to compare them.
 
 ## Policy updating methods
 
-In the previous section, we introduced a _Dirichlet tree search algorithm_ in which each node maintains Dirichlet parameters \(\alpha(s)\) for the policy distribution and \(\beta(s)\) for the outcome distribution. During **backpropagation**, we do a simple **Dirichlet increment** rule such as:
+In this section we'll discuss how to update the policy parameters $\alpha(s)$ in the backpropagation part of the tree search algorithm. Above we used a heuristic "Dirichlet increment" rule, but there are other good alternatives. We'll also try to put the problem into a broader context.
 
-$$
-  \alpha(s)_a \;\leftarrow\; 
-  \max\bigl(\alpha(s)_a + \Delta(o'),\, \epsilon\bigr),
-$$
+### Theoretical considerations
 
-for the action $a$ that led to outcome $o'$. This is a **heuristic** approach: we interpret a positive $\Delta$ for “good outcomes,” a negative $\Delta$ for “bad outcomes,” and so on. But it is *not* a purely Bayesian update in the sense of “the environment’s likelihood times a prior.” Instead, it’s more of a bandit-like **credit assignment** method that shifts probability mass to actions with better observed outcomes.
+#### The single shot problem
 
-Below, we discuss variations and alternatives.
+_Optimization problem:_ Find a policy $\pi | s$ maximizing $E [ \text{Reward} | \pi, s ]$ under the constraint that $p(o | a) \sim \text{Dirichlet}(\beta(s | a))$ for each available action $a$.
 
-### Heuristic nature vs. Bayesian credit assignment
+This problem is actually solvable:
 
-In a pure Bayesian setting, we’d define a likelihood function $p(o'\mid a)$, multiply it by a prior $p(a)$, and obtain a posterior. For instance, in a bandit scenario with discrete outcomes, we might keep separate Dirichlet parameters for each action’s outcome distribution. However, in large branching games, that can be memory-intensive or overly complex. Thus, the *Dirichlet increment rule* in our approach is:
+$$ E [ \text{Reward} | \pi, s ] = \sum_{o, a} \text{Reward}(o) E [p(o | a)] \pi_a (s) = \sum_a \pi_a \sum_o \text{Reward}(o) \beta(s | a)_o / \sum_j \beta(s | a)_j , $$
 
-- Simple to implement: an immediate “+1 if good, -1 if bad” style update.
-- Sufficiently flexible to shift policy mass toward good actions.
+so it's easy to see that setting $\pi_a = 1$ for $a$ maximizing $\sum_o \text{Reward}(o) \beta(s | a)_o / \sum_j \beta(s | a)_j$ solves the problem.
 
-One can see this as “**Bayesian-ish**” but the increment sizes $\Delta(o')$ are themselves hyperparameters, so it is not the standard conjugate posterior update. Still, if chosen sensibly, it improves exploration and exploitation in MCTS.
+But this is not an optimal solution, because it's all the way on the exploitation side of the exploitation-exploration spectrum.
+
+#### Policy updates as a bandit problem
+
+==Bayesian bandits, Bayesian credit assignment, stochastic vs adversarial bandits, standard solutions==
 
 ### Variations on Dirichlet increments
 
@@ -208,47 +212,99 @@ One can see this as “**Bayesian-ish**” but the increment sizes $\Delta(o')$ 
    - You can keep two sets of Dirichlet parameters at each node:  
      1. $\alpha_{\mathrm{search}}$, which is updated as before in the tree search part.
      2. $\alpha_{\mathrm{avg}}$ is a *smoothed* or partial update that remains moderate in size. This is only updated at the end of the tree search, based on the aggregate of outcomes. For example, $(\alpha_{\mathrm{avg}})_a$ can be incremented by the average of outcomes experience from using action $a$.
-   - Then use \(\alpha_{\mathrm{avg}}\) as the training target for the neural net, to avoid extreme peaks in the distribution that might hamper stable training.
+   - Then use $\alpha_{\mathrm{avg}}$ as the training target for the neural net, to avoid extreme peaks in the distribution that might hamper stable training.
 
-### Exponential weights (Exp3) as an alternative
+### Exponential weights (Exp3)
 
-Another classical approach from **multi-armed bandits** is the **exponential weights** update (Exp3, Hedge, etc.). At each node $s$, you keep **weights** $w_a>0$. To pick an action, you sample:
+Another classical approach from **multi-armed bandits** is the **exponential weights** update (Exp3, Hedge, etc.). At each node s, you keep **weights** $w_a>0$. To pick an action, you sample:
 
 $$
 p(a) = \frac{w_a}{\sum_b w_b}.
 $$
 
-Note that if we identify $w_a = \alpha_a$, this _precisely_ corresponds to how we choose actions in the above specification, because of the [[#Thompson sampling shortcut]].
+Note that if we identify $w_a = \alpha_a$, this _precisely_ corresponds to how we choose actions in the above specification, because of the [[#Thompson sampling shortcut]].
 
-When outcome $o'$ is observed, you update the chosen action’s weight multiplicatively, for example:
+When outcome $o'$ is observed, you update the chosen action’s weight multiplicatively, for example:
 
 $$
-  w_a \;\leftarrow\; w_a \,\exp\bigl(\eta \, \mathrm{score}(o')\bigr).
+w_a \;\leftarrow\; w_a \,\exp\bigl(\eta \, \mathrm{score}(o')\bigr).
 $$
-
-Here, $\mathrm{score}(o')$ could be +1 for a win, -1 for a loss, or some bounded reward. This is conceptually close to Dirichlet increments—except the update is _multiplicative_ rather than _additive_. Both methods shift probability toward more successful actions over repeated visits.
+Here, $\mathrm{score}(o')$ could be +1 for a win, -1 for a loss, or some bounded reward. This is conceptually close to Dirichlet increments—except the update is _multiplicative_ rather than _additive_. Both methods shift probability toward more successful actions over repeated visits.
 
 #### One action dominating
 
-In exponential weights, a single action’s $w_a$ can grow exponentially large if it gets a run of positive outcomes—potentially hurting exploration. A standard fix is:
+In exponential weights, a single action’s $w_a$ can grow exponentially large if it gets a run of positive outcomes—potentially hurting exploration. A standard fix is:
 
 $$
 p(a) = (1 - \gamma)\,\frac{w_a}{\sum_b w_b} \;+\; \frac{\gamma}{|A|},
 $$
 
-ensuring each action has at least probability $\gamma / |A|$. That’s the typical “**exploration term**” in Exp3. Similarly, in **Dirichlet increments**, you might keep a small positive offset or partial increments to avoid vanishingly small $\alpha_a$.
+ensuring each action has at least probability $\gamma / |A|$. That’s the typical “**exploration term**” in Exp3. Similarly, in **Dirichlet increments**, you might keep a small positive offset or partial increments to avoid vanishingly small $\alpha_a$.
 
-### Pros and cons: Dirichlet increments vs exponential weights
+### Upper confidence bound (UCB)
 
-1. **Dirichlet increments**  
-   - **Pros**: Very direct, aligns with Bayesian “success counts.” Easy to interpret each $\alpha_a$ as a pseudo-count of how good the action has been. Thompson sampling from $\mathrm{Dir}(\alpha)$ arises naturally.  
-   - **Cons**: If increments are large, we can saturate quickly. If we allow negative increments, we must clamp at $\epsilon$. Tuning increment size or partial increments can be tricky.
 
-2. **Exponential weights**  
-   - **Pros**: Has well-studied theoretical properties in bandit settings (Exp3, Hedge). Straightforward multiplicative update.  
-   - **Cons**: Can saturate more quickly if $\eta$ is large. Typically needs an **explicit exploration** mix to avoid prematurely ignoring actions.  
+### Active Inference
 
-**Exploration vs. Exploitation** is controlled by hyperparameters in both methods. In practice, either approach can be made to work effectively with a bit of tuning.
+In _active inference_ the policy should satisfy ==I don't fully understand the theoretical justification yet==
+
+$$ \pi_a = p(a | s) \propto \exp(- G(a)) , $$
+
+where $G(a)$ is the _expected free energy_. More precisely,
+
+$$ G(a) = D_{\text{KL}}\left( Q(o | a) \Vert P(o) \right) , $$
+
+where $Q(o | a)$ is an estimate probability of outcome $o$ given action $a$, and $P(o)$ is a _preference distribution_ (assigning large probabilities to desired outcomes). The preference distribution is something fixed for the model, it is hard-coded or tuned over time.
+
+In our model, $Q(o | a)$ corresponds to a sampled $p(o | a)$ at state $s$. Since we're keeping a distribution over distributions, the above formula for the policy in terms of expected free energy yields a distribution over policies -- which is exactly what our model calls for.
+
+To be precise, here is the scheme: For each action $a$ at the root node $s$, sample an outcome distribution $p(o | a, s)$ from $\text{Dirichlet}(\beta(s | a))$ (where $s | a$ denotes the target state of action $a$), then compute 
+
+$$
+G(a) = D_{\text{KL}}\left( p(o | a, s) \Vert P(o) \right) = \sum_{o=-1}^1 p(o | a, s )\log \frac{p(o | a,s)}{P(o)} . 
+$$
+
+This yields a policy $\pi_a = p(a | s) \propto \exp(- G(a))$. Since $p(o | a, s)$ was itself a random variable, this actually yields a distribution of policies.
+
+#### Possible implementation
+
+The resulting updates simplify if we replace the random variable $G(a)$ by the expected free energy $E[ G(a) ]$.[^6] Indeed, we have
+
+[^6]: This sounds a bit confusing, because $G(a)$ is already called expected free energy. What we mean here is really to take the expectation over possible distributions $p(o | a, s)$.
+
+$$
+E [ G(a) ] = \sum_{o = -1}^1 E[ p(o | a, s) \log p(o | a, s) ] - \sum_{o=-1}^1 E[p(o | a, s)] \log P(o) . 
+$$
+
+The point is that there are known formulas for both of these expectations ==The second formula I got from ChatGPT and haven't checked!==
+
+$$\begin{aligned}
+E [ p(o | a, s) | o ] & = \beta(s | a)_o / \sum_j \beta(s | a)_j , \\
+E \left[ - \sum_{o=-1}^1 p(o | a, s) \log p(o | a, s) \right]
+& = \psi(\sum_{o} \beta(s|a)_{o} + 1) - \frac{\sum_{o=-1}^1 \beta(s|a)_o \psi(\beta(s|a)_o + 1)}{\sum_o \beta(s|a)_o} .
+\end{aligned}$$
+
+where $\psi$ is the digamma function. These combined give a closed form expression for $E[ G(a) ]$ in terms of the $\beta(s | a)$.
+
+Having the expected free energy $E [ G(a) ]$, we can follow the approach from the free energy principle and set a policy
+
+$$
+\pi_a = p(a | s) \propto \exp( - E[ G(a)] ) .
+$$
+
+Note that this is now a fixed policy, and not a distribution $p(\pi | s)$ as we have used earlier. So in this version of the algorithm, we keep track of $\beta(s)$ at each node $s$ as well as a _specific_ policy $\pi = p(a | s)$. It is clear how to use this formula to update $\pi_a$ continually:
+
+1. If we selected action $a$, update $\beta(s | a)$ as described before.
+2. Use the updated values of $\beta(s | a)$ to update $\pi_a$ using the above formula. 
+
+#### Further questions
+
+Here are some questions, about the original method based on FEP rather than the implementation based on expected free energy.
+
+1. Is there a closed form for the resulting distribution $p(\pi)$? Can it be expressed in terms of the Dirichlet parameters $\beta(s | a)$? Is it a Dirichlet distribution?
+2. Assume that the distribution over policies $p(\pi)$ is given by the free energy method described above. If we do an iteration of the tree search algorithm starting with action $a$, we know how this affects $\beta(s | a)$ (increment $\beta(s | a)_o \leftarrow \beta(s | a) + 1$). Is there a nice formula for the corresponding update of $p(\pi)$?
+
+### Comparison of methods
 
 ## Practical considerations
 
