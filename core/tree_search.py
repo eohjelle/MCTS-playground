@@ -10,9 +10,6 @@ class State(Protocol[ActionType]):
     def get_legal_actions(self) -> List[ActionType]:
         pass
     
-    def apply_action(self, action: ActionType) -> 'State[ActionType]':
-        pass
-    
     def is_terminal(self) -> bool:
         pass
 
