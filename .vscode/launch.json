@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Tic Tac Toe",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/applications/tic_tac_toe/play.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        }
+    ]
+} 
