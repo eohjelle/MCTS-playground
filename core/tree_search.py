@@ -1,4 +1,4 @@
-from typing import Tuple, TypeVar, Optional, Protocol, Generic, List, Dict
+from typing import Tuple, TypeVar, Optional, Protocol, Generic, List, Dict, Callable
 
 # Define some types
 ActionType = TypeVar('ActionType')  # type of actions at a state in the game
@@ -73,8 +73,12 @@ class TreeSearch(Protocol[ActionType, ValueType, EvaluationType]):
         
         This is a concrete implementation that uses the abstract methods above.
         """
+
+        # If the root node is a leaf node, it is initialized as if it has been visited before during tree search
         if self.root.is_leaf():
             self.root.expand()
+            evaluation = self.evaluate(self.root)
+            self.update(self.root, None, evaluation)
 
         for _ in range(num_simulations):
             node = self.root
@@ -101,14 +105,10 @@ class TreeSearch(Protocol[ActionType, ValueType, EvaluationType]):
         
         return self.policy(self.root), self.root.value
     
-    def update_root(self, actions: List[ActionType], initialize: bool = True) -> None:
-        """Update the root node after committing to actions. May need to be overridden by subclasses to set default values."""
+    def update_root(self, actions: List[ActionType]) -> None:
+        """Update the root node after committing to actions."""
         for action in actions:
             if action in self.root.children:
                 self.root = self.root.children[action]
             else:
                 self.root = Node(self.root.state.apply_action(action))
-        if initialize:
-            self.root.expand()
-            evaluation = self.evaluate(self.root)
-            self.update(self.root, None, evaluation)

@@ -62,11 +62,6 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[Dict[ActionType, fl
         self._dirichlet_alpha = dirichlet_alpha
         self._dirichlet_epsilon = dirichlet_epsilon
         self._temperature = temperature
-        
-        # Set prior probabilities with Dirichlet noise for root's children
-        self.root.expand()
-        policy, _ = self._model.decode_output(self._model.forward(self.root.state))
-        self._set_prior_probabilities(self.root, policy)
     
     def _set_prior_probabilities(self, node: Node[ActionType, AlphaZeroValue], policy: Dict[ActionType, float]) -> None:
         """Set prior probabilities for node's children.
@@ -93,7 +88,7 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[Dict[ActionType, fl
     def evaluate(self, node: Node[ActionType, AlphaZeroValue]) -> Tuple[Dict[ActionType, float], float, int]:
         """Evaluate a leaf node's state."""
         if node.state.is_terminal():
-            return AlphaZeroValue(), node.state.get_reward(node.state.current_player)
+            return {}, node.state.get_reward(node.state.current_player), node.state.current_player
         
         # Get policy and value from neural network
         policy, Qvalue = self._model.decode_output(self._model.forward(node.state))
@@ -120,10 +115,14 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[Dict[ActionType, fl
         
         return max(node.children.items(), key=puct_score)[0]
     
-    def update(self, node: Node[ActionType, AlphaZeroValue], action: Optional[ActionType], evaluation: Tuple[AlphaZeroValue, float]) -> None:
+    def update(self, node: Node[ActionType, AlphaZeroValue], action: Optional[ActionType], evaluation: Tuple[Dict[ActionType, float], float, int]) -> None:
         """Update a node's statistics."""
         policy, Qvalue, leaf_player = evaluation
-        if node.value.visit_count == 0: # First visit
+
+        if node.value is None: # This can happen if the root node has not been visited earlier in tree search, e. g. at the start or after the opponent made a move that had not been explored yet
+            node.value = AlphaZeroValue(player=node.state.current_player)
+
+        if node.value.visit_count == 0:  # First visit
             self._set_prior_probabilities(node, policy)
 
         node.value.visit_count += 1
@@ -131,6 +130,8 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[Dict[ActionType, fl
             node.value.total_value += Qvalue
         else:
             node.value.total_value -= Qvalue
+
+        x = 1 # Debugging
     
     def policy(self, node: Node[ActionType, AlphaZeroValue]) -> ActionType:
         """Select an action at root based on visit counts and temperature.
