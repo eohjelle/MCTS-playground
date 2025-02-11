@@ -1,23 +1,30 @@
 from dataclasses import dataclass
 import random
 import math
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Generic
 from core.tree_search import ActionType, State, Node, TreeSearch
 
 @dataclass
 class MCTSValue:
     visit_count: int = 0  # Number of times this node has been visited
     total_value: float = 0.0  # Sum of values from all visits
-    player: int = 1  # The player at this node (1 for X, -1 for O)
+    player: int = 1  # The player at this node
     
     @property
     def mean_value(self) -> float:
         # Return value from this player's perspective
         return self.total_value / max(1, self.visit_count)
 
-class MCTS(TreeSearch[ActionType, MCTSValue, float, Dict]):
+class MCTS(TreeSearch[ActionType, MCTSValue, Tuple[MCTSValue, float]], Generic[ActionType]):
     def __init__(self, initial_state: State[ActionType], exploration_constant: float = 1.414):
-        self.root = Node(initial_state)
+        self.root = Node(
+            initial_state,
+            value=MCTSValue(
+                visit_count=0,
+                total_value=0.0,
+                player=initial_state.current_player
+            )
+        )
         self._exploration_constant = exploration_constant
     
     def select(self, node: Node[ActionType, MCTSValue]) -> ActionType:
@@ -35,39 +42,35 @@ class MCTS(TreeSearch[ActionType, MCTSValue, float, Dict]):
         
         return max(node.children.items(), key=uct_score)[0]
     
-    def evaluate(self, state: State[ActionType]) -> Tuple[MCTSValue, Optional[float], Optional[Dict]]:
+    def evaluate(self, node: Node[ActionType, MCTSValue]) -> Tuple[MCTSValue, float]:
         """Evaluate a state using random rollouts."""
-        if state.is_terminal():
-            reward = state.get_reward(state.current_player)
-            return MCTSValue(visit_count=0, total_value=0, player=state.current_player), reward, None
+        if node.state.is_terminal():
+            return MCTSValue(), node.state.get_reward(node.state.current_player)
 
-        perspective_player = state.current_player
+        perspective_player = node.state.current_player
 
         # Do a random rollout
-        current_state = state
+        current_state = node.state
         while not current_state.is_terminal():
             action = random.choice(current_state.get_legal_actions())
             current_state = current_state.apply_action(action)
         
         reward = current_state.get_reward(perspective_player)
-        return MCTSValue(visit_count=0, total_value=0, player=perspective_player), reward, None
+        node_value = MCTSValue(player=perspective_player)
+        return node_value, reward
     
-    def update(self, node: Node[ActionType, MCTSValue], action: Optional[ActionType], value: MCTSValue, outcome: Optional[float]) -> None:
+    def update(self, node: Node[ActionType, MCTSValue], action: Optional[ActionType], evaluation: Tuple[MCTSValue, float]) -> None:
         """Update a node's value by accumulating visit counts and rewards."""
-        if outcome is None:
-            outcome = 0.0
-            
         # Initialize node value if needed
         if node.value is None:
             node.value = MCTSValue(player=node.state.current_player)
         
         # Update visit count and total value
-        # Flip the outcome if this node's player is different from the evaluating player
         node.value.visit_count += 1
-        if node.value.player == value.player:
-            node.value.total_value += outcome
+        if node.value.player == evaluation[0].player:
+            node.value.total_value += evaluation[1]
         else:
-            node.value.total_value -= outcome
+            node.value.total_value -= evaluation[1]
     
     def policy(self, node: Node[ActionType, MCTSValue]) -> ActionType:
         """Select the most visited action."""

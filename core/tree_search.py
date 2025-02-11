@@ -3,14 +3,28 @@ from typing import Tuple, TypeVar, Optional, Protocol, Generic, List, Dict
 # Define some types
 ActionType = TypeVar('ActionType')  # type of actions at a state in the game
 ValueType = TypeVar('ValueType')    # type of value stored in the node, e.g. policy and expected reward
-OutcomeType = TypeVar('OutcomeType')  # type of optional outcome from evaluation
-DataType = TypeVar('DataType')      # type of optional data from evaluation
+EvaluationType = TypeVar('EvaluationType')  # type of output from evaluation
 
 class State(Protocol[ActionType]):
     def get_legal_actions(self) -> List[ActionType]:
+        """Return list of legal actions at this state."""
+        pass
+
+    def apply_action(self, action: ActionType) -> 'State[ActionType]':
+        """Apply action to state and return new state."""
         pass
     
     def is_terminal(self) -> bool:
+        """Return True if state is terminal (game over)."""
+        pass
+    
+    def get_reward(self, player: int) -> float:
+        """Return reward from player's perspective (for example, -1 for loss, 0 for draw, 1 for win)."""
+        pass
+    
+    @property
+    def current_player(self) -> int:
+        """Return current player (for example, 1 or -1)."""
         pass
 
 class Node(Generic[ActionType, ValueType]):
@@ -34,7 +48,7 @@ class Node(Generic[ActionType, ValueType]):
             child = Node(new_state, parent=self)
             self.children[action] = child
 
-class TreeSearch(Protocol[ActionType, ValueType, OutcomeType, DataType]):
+class TreeSearch(Protocol[ActionType, ValueType, EvaluationType]):
     """Protocol for tree search algorithms like MCTS."""
     root: Node[ActionType, ValueType]
     
@@ -42,11 +56,11 @@ class TreeSearch(Protocol[ActionType, ValueType, OutcomeType, DataType]):
         """Select an action at the given node during tree traversal."""
         pass
     
-    def evaluate(self, state: State[ActionType]) -> Tuple[ValueType, Optional[OutcomeType], Optional[DataType]]:
+    def evaluate(self, node: Node[ActionType, ValueType]) -> EvaluationType:
         """Evaluate a leaf node's state."""
         pass
     
-    def update(self, node: Node[ActionType, ValueType], action: Optional[ActionType], value: ValueType, outcome: Optional[OutcomeType]) -> None:
+    def update(self, node: Node[ActionType, ValueType], action: Optional[ActionType], evaluation: EvaluationType) -> None:
         """Update a node's value during backpropagation."""
         pass
     
@@ -54,13 +68,11 @@ class TreeSearch(Protocol[ActionType, ValueType, OutcomeType, DataType]):
         """Select the best action at a node according to the search results."""
         pass
     
-    def __call__(self, num_simulations: int) -> Tuple[ActionType, List[DataType]]:
+    def __call__(self, num_simulations: int) -> Tuple[ActionType, ValueType]:
         """Run simulations and return the best action according to the policy.
         
         This is a concrete implementation that uses the abstract methods above.
         """
-        collected_data: List[DataType] = []
-
         if self.root.is_leaf():
             self.root.expand()
 
@@ -76,22 +88,18 @@ class TreeSearch(Protocol[ActionType, ValueType, OutcomeType, DataType]):
             
             path.append((node, None))  # Leaf node action is None
 
-            # Evaluation
-            value, outcome, data = self.evaluate(node.state)
-
             # Expansion
             if not node.state.is_terminal():
                 node.expand()
 
+            # Evaluation
+            evaluation = self.evaluate(node)
+
             # Backpropagation
             for node, action in reversed(path):
-                self.update(node, action, value, outcome)
-            
-            # Collect data
-            if data is not None:
-                collected_data.append(data)
+                self.update(node, action, evaluation)
         
-        return self.policy(self.root), collected_data
+        return self.policy(self.root), self.root.value
     
     def update_root(self, actions: List[ActionType]) -> None:
         """Update the root node after committing to actions."""

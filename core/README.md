@@ -1,6 +1,9 @@
 # Abstract Tree Search
 
-The file `tree_search.py` contains an abstract version of commonly used variants of Monte Carlo Tree Search (MCTS).
+This folder contains two main files:
+
+- `tree_search.py`: An abstract version of commonly used variants of Monte Carlo Tree Search (MCTS).
+- `model.py`: Interface for deep learning models and (self-play) training procedures for use in tree search algorithms.
 
 ## How to use
 
@@ -15,5 +18,5 @@ The user needs to provide implementations of the following:
 
 ## Examples
 
-- MCTS
-- AlphaZero
+- [MCTS](implementations/MCTS.py)
+- [AlphaZero](implementations/AlphaZero.py)

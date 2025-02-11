@@ -3,37 +3,60 @@ from core.tree_search import State
 
 class TicTacToeState(State[Tuple[int, int]]):
     def __init__(self, board: Optional[List[List[str]]] = None, current_player: int = 1):
-        self.board = board if board is not None else [[' ' for _ in range(3)] for _ in range(3)]
-        self.current_player = current_player  # 1 for X, -1 for O
-        
-    def get_legal_actions(self) -> List[Tuple[int, int]]:
-        """Returns list of empty positions as (row, col) tuples."""
-        return [(i, j) for i in range(3) for j in range(3) if self.board[i][j] == ' ']
-    
-    def apply_action(self, action: Tuple[int, int]) -> 'TicTacToeState':
-        """Apply move and return new state."""
-        row, col = action
-        new_board = [row[:] for row in self.board]
-        new_board[row][col] = 'X' if self.current_player == 1 else 'O'
-        return TicTacToeState(new_board, -self.current_player)
-    
-    def is_terminal(self) -> bool:
-        """Check if game is over."""
-        return self._get_winner() is not None or len(self.get_legal_actions()) == 0
-    
-    def get_reward(self, perspective_player: int) -> float:
-        """Return reward from the given player's perspective.
+        """Initialize TicTacToe state.
         
         Args:
-            perspective_player: The player (1 for X, -1 for O) whose perspective to return the reward from.
+            board: 3x3 list of lists with entries '', 'X', or 'O'
+            current_player: 1 for X, -1 for O
+        """
+        self.board = board if board is not None else [[''] * 3 for _ in range(3)]
+        self._current_player = current_player
+    
+    def get_legal_actions(self) -> List[Tuple[int, int]]:
+        """Return list of empty positions as (row, col) tuples."""
+        return [(i, j) for i in range(3) for j in range(3) if self.board[i][j] == '']
+    
+    def apply_action(self, action: Tuple[int, int]) -> 'TicTacToeState':
+        """Return new state after applying action."""
+        row, col = action
+        if self.board[row][col] != '':
+            raise ValueError(f"Position {action} is already occupied")
+        
+        # Create new board with action applied
+        new_board = [row.copy() for row in self.board]
+        new_board[row][col] = 'X' if self._current_player == 1 else 'O'
+        
+        # Return new state with opposite player's turn
+        return TicTacToeState(new_board, -self._current_player)
+    
+    def is_terminal(self) -> bool:
+        """Return True if game is over."""
+        return self._has_winner() or len(self.get_legal_actions()) == 0
+    
+    def get_reward(self, perspective_player: int) -> float:
+        """Return reward from perspective_player's view.
+        
+        Returns:
+            1.0 if perspective_player won
+            -1.0 if perspective_player lost
+            0.0 if draw or game not over
         """
         winner = self._get_winner()
-        if winner is None:
+        if winner == 0:
             return 0.0
         return 1.0 if winner == perspective_player else -1.0
     
-    def _get_winner(self) -> Optional[int]:
-        """Return 1 for X win, -1 for O win, None for no winner yet."""
+    @property
+    def current_player(self) -> int:
+        """Return current player (1 for X, -1 for O)."""
+        return self._current_player
+    
+    def _has_winner(self) -> bool:
+        """Return True if either player has won."""
+        return self._get_winner() != 0
+    
+    def _get_winner(self) -> int:
+        """Return 1 if X won, -1 if O won, 0 if no winner."""
         # Check rows
         for row in self.board:
             if row.count('X') == 3:
@@ -42,26 +65,23 @@ class TicTacToeState(State[Tuple[int, int]]):
                 return -1
         
         # Check columns
-        for col in range(3):
-            if [self.board[row][col] for row in range(3)].count('X') == 3:
+        for j in range(3):
+            col = [self.board[i][j] for i in range(3)]
+            if col.count('X') == 3:
                 return 1
-            if [self.board[row][col] for row in range(3)].count('O') == 3:
+            if col.count('O') == 3:
                 return -1
         
         # Check diagonals
-        if self.board[0][0] == self.board[1][1] == self.board[2][2]:
-            if self.board[0][0] == 'X':
-                return 1
-            if self.board[0][0] == 'O':
-                return -1
+        diag1 = [self.board[i][i] for i in range(3)]
+        diag2 = [self.board[i][2-i] for i in range(3)]
         
-        if self.board[0][2] == self.board[1][1] == self.board[2][0]:
-            if self.board[0][2] == 'X':
-                return 1
-            if self.board[0][2] == 'O':
-                return -1
+        if diag1.count('X') == 3 or diag2.count('X') == 3:
+            return 1
+        if diag1.count('O') == 3 or diag2.count('O') == 3:
+            return -1
         
-        return None
+        return 0  # No winner
     
     def __str__(self) -> str:
         """Return string representation of board."""
