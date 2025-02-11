@@ -11,7 +11,12 @@ This folder contains tools for implementing tree search algorithms that work wit
 
 A barebones tree search algorithm just needs to implement the following protocols from `tree_search.py`:
 
-- `State`: A class encoding a state of the game.
+- `State`: A class encoding a state of the game. The user needs to implement the following methods:
+  - `get_legal_actions`: Return a list of legal actions.
+  - `apply_action`: Apply an action to the state.
+  - `is_terminal`: Return True if the game is over.
+  - `get_reward`: Return the reward for the current player.
+  - `current_player`: Return the current player.
 - `TreeSearch`: A protocol for tree search algorithms. The user needs to implement the following methods:
   - `select`: Select an action at the given node during tree traversal.
   - `evaluate`: Evaluate a leaf node's state.
