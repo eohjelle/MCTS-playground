@@ -28,7 +28,7 @@ class AlphaZeroModelInterface(ModelInterface[ActionType, ModelOutput]):
     def decode_output(self, output: ModelOutput) -> AlphaZeroPrediction:
         pass
 
-class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[AlphaZeroValue, float]], Generic[ActionType]):
+class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[Dict[ActionType, float], float, int]], Generic[ActionType]):
     def __init__(
         self, 
         initial_state: State[ActionType], 
@@ -65,7 +65,7 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[AlphaZeroValue, flo
         
         # Set prior probabilities with Dirichlet noise for root's children
         self.root.expand()
-        value, policy = self.evaluate(self.root)
+        policy, _ = self._model.decode_output(self._model.forward(self.root.state))
         self._set_prior_probabilities(self.root, policy)
     
     def _set_prior_probabilities(self, node: Node[ActionType, AlphaZeroValue], policy: Dict[ActionType, float]) -> None:
@@ -87,10 +87,10 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[AlphaZeroValue, flo
                 visit_count=0,
                 total_value=0.0,
                 prior_probability=prior,
-                player=-node.state.current_player  # Opponent's turn
+                player=child.state.current_player  # Opponent's turn
             )
     
-    def evaluate(self, node: Node[ActionType, AlphaZeroValue]) -> Tuple[AlphaZeroValue, float]:
+    def evaluate(self, node: Node[ActionType, AlphaZeroValue]) -> Tuple[Dict[ActionType, float], float, int]:
         """Evaluate a leaf node's state."""
         if node.state.is_terminal():
             return AlphaZeroValue(), node.state.get_reward(node.state.current_player)
@@ -98,11 +98,7 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[AlphaZeroValue, flo
         # Get policy and value from neural network
         policy, Qvalue = self._model.decode_output(self._model.forward(node.state))
         
-        # Set node value and prior probabilities for children
-        node.value = AlphaZeroValue(player=node.state.current_player)
-        self._set_prior_probabilities(node, policy)
-        
-        return node.value, Qvalue
+        return policy, Qvalue, node.state.current_player
     
     def select(self, node: Node[ActionType, AlphaZeroValue]) -> ActionType:
         """Select an action using PUCT formula."""
@@ -126,11 +122,15 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[AlphaZeroValue, flo
     
     def update(self, node: Node[ActionType, AlphaZeroValue], action: Optional[ActionType], evaluation: Tuple[AlphaZeroValue, float]) -> None:
         """Update a node's statistics."""
+        policy, Qvalue, leaf_player = evaluation
+        if node.value.visit_count == 0: # First visit
+            self._set_prior_probabilities(node, policy)
+
         node.value.visit_count += 1
-        if node.value.player == evaluation[0].player:
-            node.value.total_value += evaluation[1]
+        if node.value.player == leaf_player:
+            node.value.total_value += Qvalue
         else:
-            node.value.total_value -= evaluation[1]
+            node.value.total_value -= Qvalue
     
     def policy(self, node: Node[ActionType, AlphaZeroValue]) -> ActionType:
         """Select an action at root based on visit counts and temperature.
@@ -153,10 +153,16 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[AlphaZeroValue, flo
         probs = {action: count / total 
                 for action, count in scaled_visits.items()}
         
-        # Sample from the probability distribution
+        # Convert to lists while keeping actions and probabilities aligned
         actions = list(probs.keys())
-        probabilities = list(probs.values())
-        return np.random.choice(actions, p=probabilities)
+        probabilities = np.array(list(probs.values()))
+        
+        # Ensure probabilities sum to 1 (handle numerical errors)
+        probabilities = probabilities / np.sum(probabilities)
+        
+        # Select action index and return the corresponding action tuple
+        idx = np.random.choice(len(actions), p=probabilities)
+        return actions[idx]
 
 class AlphaZeroTrainer(TreeSearchTrainer[ActionType, ModelOutput, AlphaZeroPrediction]):
     def __init__(

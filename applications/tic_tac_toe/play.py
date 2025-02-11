@@ -64,8 +64,6 @@ def play_game(
         
         # Apply action and update agent's tree
         state = state.apply_action(action)
-        if agent.root.is_leaf():
-            agent.root.expand()
         agent.update_root([action])
         print_board(state)
     

@@ -95,13 +95,20 @@ class TreeSearch(Protocol[ActionType, ValueType, EvaluationType]):
             # Evaluation
             evaluation = self.evaluate(node)
 
-            # Backpropagation
+            # Backpropagation, including the leaf node
             for node, action in reversed(path):
                 self.update(node, action, evaluation)
         
         return self.policy(self.root), self.root.value
     
-    def update_root(self, actions: List[ActionType]) -> None:
-        """Update the root node after committing to actions."""
+    def update_root(self, actions: List[ActionType], initialize: bool = True) -> None:
+        """Update the root node after committing to actions. May need to be overridden by subclasses to set default values."""
         for action in actions:
-            self.root = self.root.children[action]
+            if action in self.root.children:
+                self.root = self.root.children[action]
+            else:
+                self.root = Node(self.root.state.apply_action(action))
+        if initialize:
+            self.root.expand()
+            evaluation = self.evaluate(self.root)
+            self.update(self.root, None, evaluation)
