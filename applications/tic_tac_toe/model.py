@@ -52,8 +52,8 @@ class TicTacToeModel(ModelInterface[Tuple[int, int], ModelOutput, AlphaZeroTarge
     def encode_state(self, state: TicTacToeState) -> torch.Tensor:
         """Convert board state to neural network input tensor."""
         # Create two 3x3 planes: one for X positions, one for O positions
-        x_plane = torch.zeros(3, 3, device=self.device)
-        o_plane = torch.zeros(3, 3, device=self.device)
+        x_plane = torch.zeros(3, 3, device=self.model._device)
+        o_plane = torch.zeros(3, 3, device=self.model._device)
         
         for i in range(3):
             for j in range(3):
@@ -84,11 +84,12 @@ class TicTacToeModel(ModelInterface[Tuple[int, int], ModelOutput, AlphaZeroTarge
         
         # Convert to action->probability dictionary
         policy_dict = {}
-        for i in range(3):
-            for j in range(3):
-                idx = i * 3 + j
-                prob = policy_probs[idx]  # Keep as tensor
-                if prob > 0:  # Optional optimization to skip zero probabilities
-                    policy_dict[(i, j)] = prob
+        for idx in range(9):  # 3x3 board
+            prob = policy_probs[idx]  # Keep as tensor
+            if prob > 0:  # Optional optimization to skip zero probabilities
+                # Convert flat index back to (row, col)
+                row = idx // 3
+                col = idx % 3
+                policy_dict[(row, col)] = prob
         
         return policy_dict, value  # Keep value as tensor

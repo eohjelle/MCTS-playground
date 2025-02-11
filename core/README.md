@@ -1,13 +1,15 @@
 # Abstract Tree Search
 
-This folder contains two main files:
+This folder contains tools for implementing tree search algorithms that work with deep learning models.
 
-- `tree_search.py`: An abstract version of commonly used variants of Monte Carlo Tree Search (MCTS).
-- `model.py`: Interface for deep learning models and (self-play) training procedures for use in tree search algorithms.
+## Example implementations
+
+- [Monte Carlo Tree Search (MCTS)](implementations/MCTS.py)
+- [AlphaZero](implementations/AlphaZero.py)
 
 ## How to use
 
-The user needs to provide implementations of the following:
+A barebones tree search algorithm just needs to implement the following protocols from `tree_search.py`:
 
 - `State`: A class encoding a state of the game.
 - `TreeSearch`: A protocol for tree search algorithms. The user needs to implement the following methods:
@@ -16,7 +18,13 @@ The user needs to provide implementations of the following:
   - `update`: Update a node's value during backpropagation.
   - `policy`: Select the best action at a node according to the search results.
 
-## Examples
+For more advanced tree search algorithms, relying on deep learning models for evaluation, the file `model.py` provides protocols for training such deep learning models with self play using tree search:
 
-- [MCTS](implementations/MCTS.py)
-- [AlphaZero](implementations/AlphaZero.py)
+- `ModelInterface`: A protocol for models to be trained with tree search. The user needs to implement the following methods:
+  - `encode_state`: Convert a game state to a model input.
+  - `forward`: Raw model forward pass returning raw model outputs.
+  - `decode_output`: Convert raw model outputs to target format.
+- `TreeSearchTrainer`: A protocol for training models used in tree search. The user needs to implement the following methods:
+  - `create_tree_search`: Create a tree search instance for a given game state.
+  - `extract_examples`: Extract training examples from a game.
+  - `compute_loss`: Compute the loss for a single prediction and example.

@@ -60,7 +60,7 @@ def play_game(
             action = get_human_action(state)
         else:
             # Run simulations and get best action
-            action, _ = agent(num_simulations)
+            action = agent(num_simulations)
             print(f"Agent plays: {action}")
         
         # Apply action and update agent's tree
