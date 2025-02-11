@@ -20,19 +20,27 @@ class AlphaZeroValue:
         # Return value from this player's perspective
         return self.total_value / max(1, self.visit_count)
 
-# Type alias for predictions
+# Type alias for model outputs and targets
 ModelOutput = Tuple[torch.Tensor, torch.Tensor]  # (policy_logits, value)
-AlphaZeroPrediction = Tuple[Dict[ActionType, float], float] # (policy, Qvalue)
+AlphaZeroTarget = Tuple[Dict[ActionType, torch.Tensor], torch.Tensor]  # (policy probabilities, value)
 
-class AlphaZeroModelInterface(ModelInterface[ActionType, ModelOutput]):
-    def decode_output(self, output: ModelOutput) -> AlphaZeroPrediction:
-        pass
-
-class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[Dict[ActionType, float], float, int]], Generic[ActionType]):
+class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[Dict[ActionType, torch.Tensor], torch.Tensor, int]], Generic[ActionType]):
+    """AlphaZero tree search implementation.
+    
+    Type parameters:
+        ActionType: Type of actions in the game (e.g. tuple of coordinates)
+    
+    The tree search uses:
+        - AlphaZeroValue to store node statistics (visit counts, values, priors)
+        - Tuple[Dict[ActionType, torch.Tensor], torch.Tensor, int] as evaluation type:
+            - Dict[ActionType, torch.Tensor]: Policy (action -> probability mapping)
+            - torch.Tensor: Value estimate
+            - int: Player perspective for the value
+    """
     def __init__(
         self, 
         initial_state: State[ActionType], 
-        model: AlphaZeroModelInterface[ActionType],
+        model: ModelInterface[ActionType, ModelOutput, AlphaZeroTarget],
         exploration_constant: float = 1.0,
         dirichlet_alpha: float = 0.3,
         dirichlet_epsilon: float = 0.25,
@@ -91,9 +99,11 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[Dict[ActionType, fl
             return {}, node.state.get_reward(node.state.current_player), node.state.current_player
         
         # Get policy and value from neural network
-        policy, Qvalue = self._model.decode_output(self._model.forward(node.state))
+        model_input = self._model.encode_state(node.state)
+        model_output = self._model.forward(model_input)
+        policy, value = self._model.decode_output(model_output)
         
-        return policy, Qvalue, node.state.current_player
+        return policy, value, node.state.current_player
     
     def select(self, node: Node[ActionType, AlphaZeroValue]) -> ActionType:
         """Select an action using PUCT formula."""
@@ -130,8 +140,6 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[Dict[ActionType, fl
             node.value.total_value += Qvalue
         else:
             node.value.total_value -= Qvalue
-
-        x = 1 # Debugging
     
     def policy(self, node: Node[ActionType, AlphaZeroValue]) -> ActionType:
         """Select an action at root based on visit counts and temperature.
@@ -165,15 +173,14 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[Dict[ActionType, fl
         idx = np.random.choice(len(actions), p=probabilities)
         return actions[idx]
 
-class AlphaZeroTrainer(TreeSearchTrainer[ActionType, ModelOutput, AlphaZeroPrediction]):
+class AlphaZeroTrainer(TreeSearchTrainer[ActionType, ModelOutput, AlphaZeroValue, AlphaZeroTarget]):
     def __init__(
         self,
-        model: AlphaZeroModelInterface[ActionType],
+        model: ModelInterface[ActionType, ModelOutput, AlphaZeroTarget],
         initial_state_fn: callable,
         exploration_constant: float = 1.0,
         dirichlet_alpha: float = 0.3,
-        dirichlet_epsilon: float = 0.25,
-        temperature_schedule: Optional[callable] = None
+        dirichlet_epsilon: float = 0.25
     ):
         """Initialize AlphaZero trainer.
         
@@ -183,71 +190,105 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, ModelOutput, AlphaZeroPredi
             exploration_constant: Controls exploration in PUCT formula
             dirichlet_alpha: Alpha parameter for Dirichlet noise
             dirichlet_epsilon: Weight of Dirichlet noise in root prior
-            temperature_schedule: Optional function that takes move count and returns temperature
-                                (defaults to constant temperature of 1.0)
         """
         self.model = model
         self.initial_state_fn = initial_state_fn
         self.optimizer = torch.optim.Adam(model.parameters())
         self.replay_buffer = []
-        self.temperature_schedule = temperature_schedule or (lambda _: 1.0)
         
         # Store exploration parameters
         self.exploration_constant = exploration_constant
         self.dirichlet_alpha = dirichlet_alpha
         self.dirichlet_epsilon = dirichlet_epsilon
     
-    def create_tree_search(self, state: State[ActionType], move_count: int = 0) -> TreeSearch:
-        """Create an AlphaZero instance for the given state.
-        
-        Args:
-            state: Current game state
-            move_count: Current move number (used for temperature scheduling)
-        """
+    def create_tree_search(self, state: State[ActionType]) -> TreeSearch:
+        """Create an AlphaZero instance for the given state."""
         return AlphaZero(
             initial_state=state,
             model=self.model,
             exploration_constant=self.exploration_constant,
             dirichlet_alpha=self.dirichlet_alpha,
             dirichlet_epsilon=self.dirichlet_epsilon,
-            temperature=self.temperature_schedule(move_count)
+            temperature=1.0  # Use constant temperature during training
         )
+    
+    def extract_examples(
+        self,
+        game: List[Tuple[Node[ActionType, AlphaZeroValue], ActionType]]
+    ) -> List[TrainingExample[ActionType, AlphaZeroTarget]]:
+        """Create training examples from game history.
+        
+        For each state in the game:
+        - Policy target is based on the visit counts of the children
+        - Value target is the game outcome from that player's perspective
+        
+        Returns:
+            List of training examples with tensor-valued targets
+        """
+        examples = []
+        final_state = game[-1][0].state
+        game_outcome = final_state.get_reward(final_state.current_player)
+        
+        for node, _ in game:
+            # Convert visit counts to policy
+            visits = {a: n.value.visit_count for a, n in node.children.items()}
+            total_visits = sum(visits.values())
+            policy = {a: torch.tensor(v/total_visits, dtype=torch.float32) 
+                     for a, v in visits.items()}
+            
+            # Get value from game outcome
+            is_same_player = node.state.current_player == final_state.current_player
+            value = torch.tensor(
+                game_outcome if is_same_player else -game_outcome,
+                dtype=torch.float32
+            )
+            
+            examples.append(TrainingExample(
+                state=node.state,
+                target=(policy, value)
+            ))
+        
+        return examples
     
     def compute_loss(
         self,
-        predictions: List[ModelOutput],
-        examples: List[TrainingExample[ActionType, AlphaZeroPrediction]]
+        prediction: AlphaZeroTarget,
+        example: TrainingExample[ActionType, AlphaZeroTarget]
     ) -> Tuple[torch.Tensor, Optional[Dict[str, torch.Tensor]]]:
-        """Compute AlphaZero loss components and return total loss with metrics."""
-        # Unpack predictions
-        policy_logits = torch.stack([pred[0] for pred in predictions])
-        value_pred = torch.stack([pred[1] for pred in predictions])
+        """Compute AlphaZero loss for a single example.
         
-        policy_targets = []
-        value_targets = []
+        Args:
+            prediction: Decoded model output (policy dict, value) with tensor values
+            example: Training example containing target policy dict and value
         
-        # Prepare targets
-        for example in examples:
-            policy_target = torch.zeros(self.model.policy_size)
-            for action, prob in example.value[0].items():  # value[0] is policy dict
-                idx = self.model.action_to_index(action)
-                policy_target[idx] = prob
-            policy_targets.append(policy_target)
-            value_targets.append(example.value[1])  # value[1] is Q-value
+        Returns:
+            Tuple of:
+            - Total loss combining policy and value losses
+            - Dictionary of detached metric tensors
+        """
+        pred_policy, pred_value = prediction
+        target_policy, target_value = example.target
         
-        policy_targets = torch.stack(policy_targets)
-        value_targets = torch.tensor(value_targets)
+        # Move target tensors to same device as predictions
+        device = pred_value.device
+        target_policy = {k: v.to(device) for k, v in target_policy.items()}
+        target_value = target_value.to(device)
         
-        # Policy loss (cross entropy)
-        policy_loss = -torch.mean(torch.sum(policy_targets * F.log_softmax(policy_logits, dim=1), dim=1))
+        # Policy loss (cross entropy over actions)
+        policy_loss = torch.tensor(0.0, dtype=torch.float32, device=device)
+        for action in set(pred_policy.keys()) | set(target_policy.keys()):
+            pred_prob = pred_policy.get(action, torch.tensor(0.0, dtype=torch.float32, device=device))
+            target_prob = target_policy.get(action, torch.tensor(0.0, dtype=torch.float32, device=device))
+            if target_prob > 0:
+                policy_loss -= target_prob * torch.log(pred_prob + 1e-8)
         
         # Value loss (MSE)
-        value_loss = F.mse_loss(value_pred.squeeze(-1), value_targets)
+        value_loss = F.mse_loss(pred_value, target_value)
         
-        # Total loss for optimization
+        # Total loss
         total_loss = policy_loss + value_loss
         
-        # Return metrics dictionary with detached tensors
+        # Return metrics
         metrics = {
             'policy_loss': policy_loss.detach(),
             'value_loss': value_loss.detach()

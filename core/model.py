@@ -2,31 +2,35 @@ from dataclasses import dataclass
 from typing import Generic, TypeVar, Protocol, List, Dict, Optional, Tuple, Any, runtime_checkable
 import torch
 from torch.utils.data import DataLoader
-from core.tree_search import ActionType, State, TreeSearch, ValueType
+from core.tree_search import ActionType, ValueType, State, Node, TreeSearch
 
-PredictionType = TypeVar('PredictionType')  # Type of model predictions
-ActionType = TypeVar('ActionType')  # Type of actions in the game
-
-@dataclass
-class TrainingExample(Generic[ActionType, ValueType]):
-    """A single training example from self-play."""
-    state: State[ActionType]
-    value: ValueType  # Value from tree search
+ModelInput = TypeVar('ModelInput')  # Type of raw model input, probably a tensor
+ModelOutput = TypeVar('ModelOutput')  # Type of raw model output (e.g. logits, value)
+TargetType = TypeVar('TargetType')  # Type of target returned by tree search or predicted by model
 
 @runtime_checkable
-class ModelInterface(Protocol[ActionType, PredictionType]):
+class ModelInterface(Protocol[ActionType, ModelOutput, TargetType]):
     """Protocol for (deep learning) models used in tree search, typically in the evaluation phase.
     
     Required methods:
-        forward: Raw model forward pass returning predictions for a single state
-        predict: Convert raw predictions to tree search format (value and optional outcome)
+        encode_state: Convert game state to model input
+        forward: Raw model forward pass returning raw model outputs
+        decode_output: Convert raw model outputs to target format
         
     Optional methods:
         save_checkpoint: Save model checkpoint
         load_checkpoint: Load model checkpoint
     """
-    def forward(self, state: State[ActionType]) -> PredictionType:
-        """Raw model forward pass returning predictions for a single state."""
+    def encode_state(self, state: State[ActionType]) -> ModelInput:
+        """Encode a state into a model input."""
+        pass
+
+    def decode_output(self, output: ModelOutput) -> TargetType:
+        """Decode a model output into a target format."""
+        pass
+    
+    def forward(self, input: ModelInput) -> ModelOutput:
+        """Raw model forward pass of the model."""
         pass
     
     @property
@@ -39,133 +43,147 @@ class ModelInterface(Protocol[ActionType, PredictionType]):
         """Optional method to load model checkpoint."""
         return None
 
+@dataclass
+class TrainingExample(Generic[ActionType, TargetType]):
+    """A single training example from self-play."""
+    state: State[ActionType]
+    target: TargetType  # Target extracted from game
+
 @runtime_checkable
-class TreeSearchTrainer(Protocol[ActionType, PredictionType, ValueType]):
+class TreeSearchTrainer(Protocol[ActionType, ModelOutput, ValueType, TargetType]):
     """Protocol for training models used in tree search."""
     
-    model: ModelInterface[ActionType, PredictionType]
+    model: ModelInterface[ActionType, ModelOutput, TargetType]
     initial_state_fn: callable  # Function that returns a fresh game state
     optimizer: torch.optim.Optimizer
-    replay_buffer: List[TrainingExample[ActionType, ValueType]]
+    replay_buffer: List[TrainingExample[ActionType, TargetType]]
     
     def create_tree_search(self, state: State[ActionType]) -> TreeSearch:
         """Create a tree search instance for the given state."""
         pass
     
-    def compute_loss(
-        self,
-        predictions: List[PredictionType],
-        examples: List[TrainingExample[ActionType, ValueType]]
-    ) -> Tuple[torch.Tensor, Optional[Dict[str, torch.Tensor]]]:
-        """This method computes the primary loss used for optimization and optionally returns
-        additional metrics for monitoring training progress. The metrics dictionary can
-        include component losses (e.g., policy_loss, value_loss) or other relevant metrics.
+    def extract_examples(self, game: List[Tuple[Node[ActionType, TargetType], ActionType]]) -> List[TrainingExample[ActionType, TargetType]]:
+        """Create training examples from a game.
         
         Args:
-            predictions: Model predictions for a batch of states, type depends on model
-            examples: List of training examples containing target values/outcomes
+            game: List of tuples containing a node and the action taken at that node
+        
+        Returns:
+            List of training examples
+        """
+        pass
+    
+    def compute_loss(
+        self,
+        prediction: TargetType,
+        example: TrainingExample[ActionType, TargetType]
+    ) -> Tuple[torch.Tensor, Optional[Dict[str, torch.Tensor]]]:
+        """Compute loss for a single prediction and example.
+        
+        Args:
+            prediction: Decoded model prediction for a single state
+            example: Training example containing target value/outcome
         
         Returns:
             A tuple containing:
             - loss: Primary loss tensor to be optimized (scalar)
-            - metrics: Optional dictionary of additional metrics, where:
-                - Each key is a string describing the metric
-                - Each value is a detached tensor (to avoid memory leaks)
-                - Common metrics might include component losses or accuracy measures
-                - All tensors should be scalars (0-dimensional)
+            - metrics: Optional dictionary of additional metrics
         """
         pass
+    
+    def compute_loss_batch(
+        self,
+        predictions: List[TargetType],
+        examples: List[TrainingExample[ActionType, TargetType]]
+    ) -> Tuple[torch.Tensor, Optional[Dict[str, torch.Tensor]]]:
+        """Compute loss for a batch of predictions and examples.
+        
+        Default implementation processes each example individually and averages the results.
+        Override this method for more efficient batch processing.
+        
+        Args:
+            predictions: Decoded model predictions for a batch of states
+            examples: List of training examples containing target values/outcomes
+        
+        Returns:
+            A tuple containing:
+            - loss: Average loss tensor to be optimized (scalar)
+            - metrics: Optional dictionary of additional metrics
+        """
+        losses = []
+        all_metrics = []
+        
+        for pred, ex in zip(predictions, examples):
+            loss, metrics = self.compute_loss(pred, ex)
+            losses.append(loss)
+            if metrics:
+                all_metrics.append(metrics)
+        
+        # Average the losses
+        avg_loss = torch.mean(torch.stack(losses))
+        
+        # Average the metrics if they exist
+        avg_metrics = None
+        if all_metrics:
+            avg_metrics = {}
+            for key in all_metrics[0].keys():
+                avg_metrics[key] = torch.mean(torch.stack([m[key] for m in all_metrics]))
+        
+        return avg_loss, avg_metrics
     
     def self_play_game(
         self,
         num_simulations: int,
         temperature_schedule: Optional[callable] = None
-    ) -> List[TrainingExample[ActionType, ValueType]]:
-        """Play a complete game, return list of training examples.
+    ) -> List[Tuple[Node[ActionType, ValueType], ActionType]]:
+        """Play a complete game, recording nodes and actions.
         
         Args:
             num_simulations: Number of MCTS simulations per move
-            temperature_schedule: Optional function that takes move count and returns temperature
+
+        Returns:
+            List of tuples containing a node and the action taken at that node
         """
-        examples = []
         state = self.initial_state_fn()
         tree_search = self.create_tree_search(state)
-        move_count = 0
+        game = []
         
         while not state.is_terminal():
             # Get move from tree search
-            temperature = temperature_schedule(move_count) if temperature_schedule else 1.0
-            action, value = tree_search(num_simulations)
-            
-            # Record the training example
-            examples.append(TrainingExample(
-                state=state,
-                value=value
-            ))
+            action = tree_search(num_simulations)
+
+            # Record the node and the action taken at that node
+            game.append((tree_search.root, action))
             
             # Make the move
             state = state.apply_action(action)
             tree_search.update_root([action])
-            move_count += 1
         
-        # Update examples with final outcome
-        outcome = state.get_reward(state.current_player)
-        for example in examples:
-            example.outcome = outcome if example.state.current_player == state.current_player else -outcome
-        
-        return examples
-    
-    def reanalyze(
-        self,
-        examples: List[TrainingExample[ActionType, ValueType]],
-        num_simulations: int
-    ) -> List[TrainingExample[ActionType, ValueType]]:
-        """Rerun MCTS on existing examples to get fresh value estimates.
-        
-        Args:
-            examples: List of examples to reanalyze
-            num_simulations: Number of MCTS simulations per move
-        """
-        reanalyzed_examples = []
-        for example in examples:
-            tree_search = self.create_tree_search(example.state)
-            # Run search to get fresh value estimate
-            _, value = tree_search(num_simulations)
-            # Create new example with updated value but keep original outcome
-            reanalyzed_examples.append(TrainingExample(
-                state=example.state,
-                value=value,
-                outcome=example.outcome
-            ))
-        return reanalyzed_examples
+        return game
     
     def train_batch(
         self,
-        examples: List[TrainingExample[ActionType, ValueType]],
-        num_simulations: int,
-        reanalyze: bool = False
+        examples: List[TrainingExample[ActionType, TargetType]],
+        num_simulations: int
     ) -> Dict[str, float]:
         """Train on a batch of examples.
         
         Args:
             examples: List of examples to train on
             num_simulations: Number of MCTS simulations if reanalyzing
-            reanalyze: Whether to rerun MCTS on examples
         
         Returns:
             Dict of loss metrics
         """
         self.model.train()
         
-        if reanalyze:
-            examples = self.reanalyze(examples, num_simulations)
-        
         # Get predictions for states in batch
-        states = [ex.state for ex in examples]
-        predictions = self.model.predict(states)
+        model_inputs = [self.model.encode_state(ex.state) for ex in examples]
+        model_outputs = [self.model.forward(x) for x in model_inputs]
+        predictions = [self.model.decode_output(output) for output in model_outputs]
         
         # Compute and optimize loss
-        loss, metrics = self.compute_loss(predictions, examples)
+        loss, metrics = self.compute_loss_batch(predictions, examples)
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
@@ -184,8 +202,7 @@ class TreeSearchTrainer(Protocol[ActionType, PredictionType, ValueType]):
         steps_per_iteration: int,
         num_simulations: int,
         max_buffer_size: int,
-        checkpoint_frequency: int,
-        reanalyze: bool = False
+        checkpoint_frequency: int
     ) -> None:
         """Main training loop.
         
@@ -203,7 +220,9 @@ class TreeSearchTrainer(Protocol[ActionType, PredictionType, ValueType]):
             # 1. Self-play phase
             new_examples = []
             for _ in range(games_per_iteration):
-                new_examples.extend(self.self_play_game(num_simulations))
+                game = self.self_play_game(num_simulations)
+                examples = self.extract_examples(game)
+                new_examples.extend(examples)
             
             # 2. Update replay buffer
             self.replay_buffer.extend(new_examples)
@@ -220,7 +239,7 @@ class TreeSearchTrainer(Protocol[ActionType, PredictionType, ValueType]):
             metrics = []
             for _ in range(steps_per_iteration):
                 batch = next(iter(dataloader))
-                metrics.append(self.train_batch(batch, num_simulations, reanalyze))
+                metrics.append(self.train_batch(batch, num_simulations))
             
             # 4. Logging
             avg_metrics = {

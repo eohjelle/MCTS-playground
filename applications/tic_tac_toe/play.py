@@ -5,6 +5,7 @@ from core.implementations.MCTS import MCTS, MCTSValue
 from core.implementations.AlphaZero import AlphaZero, AlphaZeroValue
 from applications.tic_tac_toe.game_state import TicTacToeState
 from applications.tic_tac_toe.model import TicTacToeModel
+import torch
 
 # Type alias for agents we support
 TicTacToeAgent = Union[
@@ -97,7 +98,9 @@ def main():
     if agent_type == 'mcts':
         agent = MCTS(initial_state)
     else:
-        model = TicTacToeModel()
+        # Use CUDA if available
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        model = TicTacToeModel(device=device)
         agent = AlphaZero(initial_state, model)
     
     # Play game

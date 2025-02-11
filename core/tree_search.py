@@ -68,9 +68,8 @@ class TreeSearch(Protocol[ActionType, ValueType, EvaluationType]):
         """Select the best action at a node according to the search results."""
         pass
     
-    def __call__(self, num_simulations: int) -> Tuple[ActionType, ValueType]:
+    def __call__(self, num_simulations: int) -> ActionType:
         """Run simulations and return the best action according to the policy.
-        
         This is a concrete implementation that uses the abstract methods above.
         """
 
@@ -103,7 +102,7 @@ class TreeSearch(Protocol[ActionType, ValueType, EvaluationType]):
             for node, action in reversed(path):
                 self.update(node, action, evaluation)
         
-        return self.policy(self.root), self.root.value
+        return self.policy(self.root)
     
     def update_root(self, actions: List[ActionType]) -> None:
         """Update the root node after committing to actions."""
