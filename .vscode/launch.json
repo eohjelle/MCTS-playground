@@ -3,9 +3,20 @@
     "configurations": [
         {
             "name": "Python: Tic Tac Toe",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/applications/tic_tac_toe/play.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Python: Tic Tac Toe Train",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/applications/tic_tac_toe/train.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {

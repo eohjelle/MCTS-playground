@@ -2,11 +2,6 @@
 
 This folder contains tools for implementing tree search algorithms that work with deep learning models.
 
-## Example implementations
-
-- [Monte Carlo Tree Search (MCTS)](implementations/MCTS.py)
-- [AlphaZero](implementations/AlphaZero.py)
-
 ## How to use
 
 A barebones tree search algorithm just needs to implement the following protocols from `tree_search.py`:
@@ -33,3 +28,8 @@ For more advanced tree search algorithms, relying on deep learning models for ev
   - `create_tree_search`: Create a tree search instance for a given game state.
   - `extract_examples`: Extract training examples from a game.
   - `compute_loss`: Compute the loss for a single prediction and example.
+
+## Implementations
+
+- [Monte Carlo Tree Search (MCTS)](implementations/MCTS.py). Implementation of the `TreeSearch` protocol.
+- [AlphaZero](implementations/AlphaZero.py). Implementation of the `TreeSearch` and `TreeSearchTrainer` protocols.

@@ -101,7 +101,12 @@ def main():
         # Use CUDA if available
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         model = TicTacToeModel(device=device)
-        agent = AlphaZero(initial_state, model)
+        # Use temperature 0 for best play (always select most visited action)
+        agent = AlphaZero(
+            initial_state=initial_state,
+            model=model,
+            temperature=0.1  # Always select most visited action
+        )
     
     # Play game
     play_game(agent, human_player)

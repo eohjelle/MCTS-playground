@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict, List, Tuple
-from core.model import ModelInterface, ModelOutput
+from typing import Dict, Tuple
+from core.model import ModelInterface
 from core.implementations.AlphaZero import AlphaZeroTarget
 from applications.tic_tac_toe.game_state import TicTacToeState
 
@@ -29,7 +29,7 @@ class TicTacToeMLP(nn.Module):
         # Move model to device
         self.to(device)
     
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
         # Hidden layer with ReLU activation
         x = F.relu(self.fc1(x))
         
@@ -39,9 +39,12 @@ class TicTacToeMLP(nn.Module):
         # Value output (tanh to bound between -1 and 1)
         value = torch.tanh(self.value_head(x))
         
-        return policy_logits, value
+        return {
+            "policy": policy_logits,
+            "value": value
+        }
 
-class TicTacToeModel(ModelInterface[Tuple[int, int], ModelOutput, AlphaZeroTarget]):
+class TicTacToeModel(ModelInterface[Tuple[int, int], AlphaZeroTarget]):
     def __init__(self, device: torch.device = torch.device('cpu')):
         self.model = TicTacToeMLP(device=device)
         # Initialize weights with small random values
@@ -69,15 +72,10 @@ class TicTacToeModel(ModelInterface[Tuple[int, int], ModelOutput, AlphaZeroTarge
             
         return torch.cat([x_plane.flatten(), o_plane.flatten()])
     
-    def forward(self, model_input: torch.Tensor) -> ModelOutput:
-        """Forward pass through the model."""
-        x = model_input.unsqueeze(0)  # Add batch dimension
-        policy_logits, value = self.model(x)
-        return policy_logits.squeeze(0), value.squeeze(0)
-    
-    def decode_output(self, output: ModelOutput) -> AlphaZeroTarget:
+    def decode_output(self, output: Dict[str, torch.Tensor]) -> AlphaZeroTarget:
         """Convert raw model output to policy dictionary and value."""
-        policy_logits, value = output
+        policy_logits = output["policy"]
+        value = output["value"]
         
         # Convert logits to probabilities
         policy_probs = F.softmax(policy_logits, dim=0)
@@ -85,11 +83,47 @@ class TicTacToeModel(ModelInterface[Tuple[int, int], ModelOutput, AlphaZeroTarge
         # Convert to action->probability dictionary
         policy_dict = {}
         for idx in range(9):  # 3x3 board
-            prob = policy_probs[idx]  # Keep as tensor
+            prob = policy_probs[idx].item()  # Convert to float
             if prob > 0:  # Optional optimization to skip zero probabilities
                 # Convert flat index back to (row, col)
                 row = idx // 3
                 col = idx % 3
                 policy_dict[(row, col)] = prob
         
-        return policy_dict, value  # Keep value as tensor
+        return policy_dict, float(value.item())  # Convert value to float
+    
+    def encode_target(self, target: AlphaZeroTarget) -> Dict[str, torch.Tensor]:
+        """Convert a target into tensor format for loss computation.
+        
+        Args:
+            target: Tuple of (policy_dict, value) where policy_dict maps actions to probabilities
+        
+        Returns:
+            Dictionary with policy tensor (9 logits) and value tensor
+        """
+        policy_dict, value = target
+        
+        # Convert policy dict to tensor
+        policy = torch.zeros(9, device=self.model._device)
+        for (row, col), prob in policy_dict.items():
+            idx = row * 3 + col
+            policy[idx] = prob
+        
+        return {
+            "policy": policy,
+            "value": torch.tensor([value], device=self.model._device)  # Add extra dimension to match model output
+        }
+    
+    def save_checkpoint(self, path: str) -> None:
+        """Save model checkpoint."""
+        torch.save({
+            'model_state_dict': self.model.state_dict(),
+            'device': self.model._device
+        }, path)
+    
+    def load_checkpoint(self, path: str) -> None:
+        """Load model checkpoint."""
+        checkpoint = torch.load(path)
+        self.model = TicTacToeMLP(device=checkpoint['device'])
+        self.model.load_state_dict(checkpoint['model_state_dict'])
+        self.model.eval()

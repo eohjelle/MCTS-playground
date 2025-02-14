@@ -1,12 +1,11 @@
 from dataclasses import dataclass
 import math
-from typing import Dict, List, Optional, Tuple, Protocol, Generic, Any, Callable
+from typing import Dict, List, Optional, Tuple, Generic
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from core.tree_search import ActionType, State, Node, TreeSearch
-from core.model import TreeSearchTrainer, ModelInterface, TrainingExample
+from core.model import TreeSearchTrainer, ModelInterface, TrainingExample, ReplayBuffer
 
 @dataclass
 class AlphaZeroValue:
@@ -20,11 +19,11 @@ class AlphaZeroValue:
         # Return value from this player's perspective
         return self.total_value / max(1, self.visit_count)
 
-# Type alias for model outputs and targets
-ModelOutput = Tuple[torch.Tensor, torch.Tensor]  # (policy_logits, value)
-AlphaZeroTarget = Tuple[Dict[ActionType, torch.Tensor], torch.Tensor]  # (policy probabilities, value)
+# Type aliases for game-specific formats
+AlphaZeroTarget = Tuple[Dict[ActionType, float], float]  # (policy probabilities, value)
+AlphaZeroEvaluation = Tuple[Dict[ActionType, float], float, int]  # (policy probabilities, value, player)
 
-class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[Dict[ActionType, torch.Tensor], torch.Tensor, int]], Generic[ActionType]):
+class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation], Generic[ActionType]):
     """AlphaZero tree search implementation.
     
     Type parameters:
@@ -32,15 +31,15 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[Dict[ActionType, to
     
     The tree search uses:
         - AlphaZeroValue to store node statistics (visit counts, values, priors)
-        - Tuple[Dict[ActionType, torch.Tensor], torch.Tensor, int] as evaluation type:
-            - Dict[ActionType, torch.Tensor]: Policy (action -> probability mapping)
-            - torch.Tensor: Value estimate
+        - AlphaZeroEvaluation as evaluation type:
+            - Dict[ActionType, float]: Policy (action -> probability mapping)
+            - float: Value estimate
             - int: Player perspective for the value
     """
     def __init__(
         self, 
         initial_state: State[ActionType], 
-        model: ModelInterface[ActionType, ModelOutput, AlphaZeroTarget],
+        model: ModelInterface[ActionType, AlphaZeroTarget],
         exploration_constant: float = 1.0,
         dirichlet_alpha: float = 0.3,
         dirichlet_epsilon: float = 0.25,
@@ -50,7 +49,9 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[Dict[ActionType, to
         
         Args:
             initial_state: Initial game state
-            model: Neural network for state evaluation
+            model: A forward pass of the underlying model must return a dictionary:
+                - "policy": Policy logits [batch_size, num_actions]
+                - "value": Value predictions [batch_size, 1]
             exploration_constant: Controls exploration in PUCT formula
             dirichlet_alpha: Alpha parameter for Dirichlet noise
             dirichlet_epsilon: Weight of Dirichlet noise in root prior
@@ -93,15 +94,13 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[Dict[ActionType, to
                 player=child.state.current_player  # Opponent's turn
             )
     
-    def evaluate(self, node: Node[ActionType, AlphaZeroValue]) -> Tuple[Dict[ActionType, float], float, int]:
+    def evaluate(self, node: Node[ActionType, AlphaZeroValue]) -> AlphaZeroEvaluation:
         """Evaluate a leaf node's state."""
         if node.state.is_terminal():
             return {}, node.state.get_reward(node.state.current_player), node.state.current_player
         
         # Get policy and value from neural network
-        model_input = self._model.encode_state(node.state)
-        model_output = self._model.forward(model_input)
-        policy, value = self._model.decode_output(model_output)
+        policy, value = self._model.predict(node.state)
         
         return policy, value, node.state.current_player
     
@@ -125,7 +124,7 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[Dict[ActionType, to
         
         return max(node.children.items(), key=puct_score)[0]
     
-    def update(self, node: Node[ActionType, AlphaZeroValue], action: Optional[ActionType], evaluation: Tuple[Dict[ActionType, float], float, int]) -> None:
+    def update(self, node: Node[ActionType, AlphaZeroValue], action: Optional[ActionType], evaluation: AlphaZeroEvaluation) -> None:
         """Update a node's statistics."""
         policy, Qvalue, leaf_player = evaluation
 
@@ -173,33 +172,43 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, Tuple[Dict[ActionType, to
         idx = np.random.choice(len(actions), p=probabilities)
         return actions[idx]
 
-class AlphaZeroTrainer(TreeSearchTrainer[ActionType, ModelOutput, AlphaZeroValue, AlphaZeroTarget]):
+class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTarget]):
     def __init__(
         self,
-        model: ModelInterface[ActionType, ModelOutput, AlphaZeroTarget],
+        model: ModelInterface[ActionType, AlphaZeroTarget],
         initial_state_fn: callable,
+        optimizer: Optional[torch.optim.Optimizer] = None,
+        replay_buffer: Optional[ReplayBuffer] = None,
+        replay_buffer_max_size: int = 100000,
         exploration_constant: float = 1.0,
         dirichlet_alpha: float = 0.3,
-        dirichlet_epsilon: float = 0.25
+        dirichlet_epsilon: float = 0.25,
+        temperature: float = 1.0
     ):
         """Initialize AlphaZero trainer.
         
         Args:
             model: Neural network for state evaluation
             initial_state_fn: Function that returns a fresh game state
+            optimizer: Optimizer for model parameters (defaults to Adam)
+            replay_buffer: Optional existing replay buffer to start with
+            replay_buffer_max_size: Maximum number of examples in replay buffer
             exploration_constant: Controls exploration in PUCT formula
             dirichlet_alpha: Alpha parameter for Dirichlet noise
             dirichlet_epsilon: Weight of Dirichlet noise in root prior
+            temperature: Controls exploration in action selection (higher means more uniform)
         """
         self.model = model
         self.initial_state_fn = initial_state_fn
-        self.optimizer = torch.optim.Adam(model.parameters())
-        self.replay_buffer = []
+        self.optimizer = optimizer if optimizer is not None else torch.optim.Adam(model.model.parameters())
+        self.replay_buffer = replay_buffer
+        self.replay_buffer_max_size = replay_buffer_max_size
         
         # Store exploration parameters
         self.exploration_constant = exploration_constant
         self.dirichlet_alpha = dirichlet_alpha
         self.dirichlet_epsilon = dirichlet_epsilon
+        self.temperature = temperature
     
     def create_tree_search(self, state: State[ActionType]) -> TreeSearch:
         """Create an AlphaZero instance for the given state."""
@@ -209,7 +218,7 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, ModelOutput, AlphaZeroValue
             exploration_constant=self.exploration_constant,
             dirichlet_alpha=self.dirichlet_alpha,
             dirichlet_epsilon=self.dirichlet_epsilon,
-            temperature=1.0  # Use constant temperature during training
+            temperature=self.temperature  # Use configured temperature
         )
     
     def extract_examples(
@@ -223,7 +232,7 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, ModelOutput, AlphaZeroValue
         - Value target is the game outcome from that player's perspective
         
         Returns:
-            List of training examples with tensor-valued targets
+            List of training examples with game-specific targets (floats)
         """
         examples = []
         final_state = game[-1][0].state
@@ -233,15 +242,11 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, ModelOutput, AlphaZeroValue
             # Convert visit counts to policy
             visits = {a: n.value.visit_count for a, n in node.children.items()}
             total_visits = sum(visits.values())
-            policy = {a: torch.tensor(v/total_visits, dtype=torch.float32) 
-                     for a, v in visits.items()}
+            policy = {a: float(v/total_visits) for a, v in visits.items()}
             
             # Get value from game outcome
             is_same_player = node.state.current_player == final_state.current_player
-            value = torch.tensor(
-                game_outcome if is_same_player else -game_outcome,
-                dtype=torch.float32
-            )
+            value = float(game_outcome if is_same_player else -game_outcome)
             
             examples.append(TrainingExample(
                 state=node.state,
@@ -252,46 +257,37 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, ModelOutput, AlphaZeroValue
     
     def compute_loss(
         self,
-        prediction: AlphaZeroTarget,
-        example: TrainingExample[ActionType, AlphaZeroTarget]
-    ) -> Tuple[torch.Tensor, Optional[Dict[str, torch.Tensor]]]:
-        """Compute AlphaZero loss for a single example.
+        predictions: Dict[str, torch.Tensor],
+        targets: Dict[str, torch.Tensor]
+    ) -> Tuple[torch.Tensor, Dict[str, float]]:
+        """Compute AlphaZero loss for a batch.
         
         Args:
-            prediction: Decoded model output (policy dict, value) with tensor values
-            example: Training example containing target policy dict and value
+            predictions: Raw model outputs for the batch:
+                - "policy": Policy logits [batch_size, num_actions]
+                - "value": Value predictions [batch_size, 1]
+            targets: Encoded targets for the batch:
+                - "policy": Target policy probabilities [batch_size, num_actions]
+                - "value": Target values [batch_size, 1]
         
         Returns:
             Tuple of:
             - Total loss combining policy and value losses
-            - Dictionary of detached metric tensors
+            - Dictionary of metrics (policy_loss and value_loss)
         """
-        pred_policy, pred_value = prediction
-        target_policy, target_value = example.target
-        
-        # Move target tensors to same device as predictions
-        device = pred_value.device
-        target_policy = {k: v.to(device) for k, v in target_policy.items()}
-        target_value = target_value.to(device)
-        
         # Policy loss (cross entropy over actions)
-        policy_loss = torch.tensor(0.0, dtype=torch.float32, device=device)
-        for action in set(pred_policy.keys()) | set(target_policy.keys()):
-            pred_prob = pred_policy.get(action, torch.tensor(0.0, dtype=torch.float32, device=device))
-            target_prob = target_policy.get(action, torch.tensor(0.0, dtype=torch.float32, device=device))
-            if target_prob > 0:
-                policy_loss -= target_prob * torch.log(pred_prob + 1e-8)
+        policy_loss = F.cross_entropy(predictions["policy"], targets["policy"])
         
         # Value loss (MSE)
-        value_loss = F.mse_loss(pred_value, target_value)
+        value_loss = F.mse_loss(predictions["value"], targets["value"])
         
         # Total loss
         total_loss = policy_loss + value_loss
         
         # Return metrics
         metrics = {
-            'policy_loss': policy_loss.detach(),
-            'value_loss': value_loss.detach()
+            'policy_loss': float(policy_loss.item()),
+            'value_loss': float(value_loss.item())
         }
         
         return total_loss, metrics
