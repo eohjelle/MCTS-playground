@@ -1,5 +1,5 @@
 import unittest
-from core.tree_search_algorithm import State, Selector, Evaluator, Node, TreeSearchAlgorithm, UCTSelector
+from core.tree_search import State, Selector, Evaluator, Node, TreeSearchAlgorithm, UCTSelector
 
 # Dummy implementations for testing
 

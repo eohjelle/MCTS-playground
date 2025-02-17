@@ -1,4 +1,9 @@
 import numpy as np
+from typing import List
+from core.tree_search import ActionType, State
+from copy import deepcopy
+
+
 
 # Constants for the game
 EMPTY_EDGE = '.'
@@ -10,7 +15,7 @@ P1, P2, P_extra = 1, -1, 2
 PLAYERS = [P1, P2, P_extra]
 PLAYER_SYMBOLS = {P1: 'A', P2: 'B', P_extra: 'X'} #Default P1 vs P2; use P_extra just to pass board states with boxes/edges of 'no ownership'
 SYMBOLS = [EMPTY_EDGE, EMPTY_BOX, HORIZONTAL, VERTICAL, CORNER] + list(PLAYER_SYMBOLS.values())
-MAX_SIZE = 2
+MAX_SIZE = 3
 
 
 def isValidBoard(arr):
@@ -66,7 +71,6 @@ class GameState:
         self.remaining_moves = self.count_symbol(EMPTY_EDGE)
         self.total_boxes = self.rows*self.cols
         self.remaining_boxes = self.count_symbol(EMPTY_BOX)
-        #keep a list self.available_moves = [] instead of the method implemented below?
     
     def __str__(self):
         out=""
@@ -110,7 +114,8 @@ class GameState:
 
     
     #places edge; closes boxes; updates scores, remaining moves, and current player
-    def placeEdge(self, i, j):
+    def placeEdge(self, coords):
+        i, j = coords
         if self.isValidMove(i,j):
             self.board[i][j] = HORIZONTAL if i%2==0 else VERTICAL
             self.edge_owners[(i,j)] = self.player_turn
@@ -125,7 +130,8 @@ class GameState:
                 self.check_if_close_box(i, j-1)
                 self.check_if_close_box(i, j+1)
             if self.boxes_just_closed>0:
-                print(f"Player {self.player_turn} completed {self.boxes_just_closed} box(es)!")
+                #print(f"Player {self.player_turn} completed {self.boxes_just_closed} box(es)!")
+                pass
             elif self.boxes_just_closed==0:
                 self.player_turn = -self.player_turn #pass to other player
             self.boxes_just_closed=0
@@ -135,26 +141,75 @@ class GameState:
         return np.where(self.board=='.', 1, 0)
 
     #Method for available moves, as a list of tuples of indices
+    @property
     def available_moves_index_list(self):
         indices = np.where(self.board=='.')
-        print(indices, '\n', indices[0])
+        #print(indices, '\n', indices[0])
         list_of_moves = list(zip(indices[0], indices[1]))
         return [tuple(x.item() for x in tpl) for tpl in list_of_moves]
-
     
-    def play(self,i,j):
-        self.placeEdge(i,j)
-        print(self)
-    
+    def is_winner(self) -> int:
+        if self.remaining_moves > 0:
+            print("Game not yet over.")
+            pass
+        else:
+            if self.scores[P1]>self.scores[P2]:
+                winner = P1
+            elif self.scores[P1]<self.scores[P2]:
+                winner = P2
+            elif self.scores[P1]==self.scores[P2]:
+                winner = 0
+            return winner
+        
+    def print_winner_and_scores(self) -> None:
+        if self.remaining_moves > 0:
+            print("Game not yet over.")
+            pass
+        else:
+            winner = self.is_winner()
+            output_str =  f"The winner is Player {winner}!" if winner!=0 else "It's a draw!"
+            print(output_str)
+            print(f"The scores are {self.scores}")
 
+
+    #Methods below needed for integration with tree_search
+    def get_legal_actions(self) -> List[ActionType]:
+        """Return list of legal actions at this state."""
+        return self.available_moves_index_list
+
+    def apply_action(self, action: ActionType) -> 'State[ActionType]':
+        """Apply action to state and return new state."""
+        nextState = deepcopy(self)
+        nextState.placeEdge(action)
+        return nextState
+    
+    def is_terminal(self) -> bool:
+        """Return True if state is terminal (game over)."""
+        return self.remaining_moves==0
+    
+    def get_reward(self, player: int) -> float:
+        """Return reward from player's perspective (for example, -1 for loss, 0 for draw, 1 for win)."""
+        if self.scores[player] > self.scores[-player]:
+            return 1
+        elif self.scores[player] == self.scores[-player]:
+            return 0
+        else:
+            return -1
+    
+    @property
+    def current_player(self) -> int:
+        """Return current player (for example, 1 or -1)."""
+        return self.player_turn
+    
 
 '''
-Basic tests:
+#Basic tests:
 x = GameState()
-x.play(1,2)
-x.play(2,1)
-x.play(0,1)
-x.play(1,0)
-print(x.available_moves_index_list())
+x.placeEdge((1,2))
+x.placeEdge((2,1))
+x.placeEdge((0,1))
+x.placeEdge((1,0))
+print(x)
+print(x.available_moves_index_list)
 print(x.edge_owners)
 '''
