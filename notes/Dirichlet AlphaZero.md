@@ -304,6 +304,10 @@ Here are some questions, about the original method based on FEP rather than the 
 1. Is there a closed form for the resulting distribution $p(\pi)$? Can it be expressed in terms of the Dirichlet parameters $\beta(s | a)$? Is it a Dirichlet distribution?
 2. Assume that the distribution over policies $p(\pi)$ is given by the free energy method described above. If we do an iteration of the tree search algorithm starting with action $a$, we know how this affects $\beta(s | a)$ (increment $\beta(s | a)_o \leftarrow \beta(s | a) + 1$). Is there a nice formula for the corresponding update of $p(\pi)$?
 
+#### References
+
+- https://arxiv.org/pdf/2501.13083
+
 ### Comparison of methods
 
 ## Practical considerations

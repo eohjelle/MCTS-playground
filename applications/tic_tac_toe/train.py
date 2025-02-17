@@ -23,15 +23,15 @@ def main():
     
     # Training hyperparameters
     trainer.train(
-        num_iterations=2,
+        num_iterations=10,
         games_per_iteration=10,
         batch_size=32,
         steps_per_iteration=10,
         num_simulations=100,
-        max_buffer_size=1000,
-        checkpoint_frequency=1,
+        checkpoint_frequency=2,
+        checkpoints_folder="applications/tic_tac_toe/checkpoints",
         evaluate_against_agent=lambda state: MCTS(state),
-        eval_frequency=1,
+        eval_frequency=10,
         verbose=True
     )
 

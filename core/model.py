@@ -4,6 +4,7 @@ import torch
 from core.tree_search import ActionType, ValueType, State, Node, TreeSearch
 from core.benchmark import Agent, benchmark
 import time
+import os
 
 TargetType = TypeVar('TargetType')  # Type of target returned by tree search or predicted by model
 
@@ -53,15 +54,19 @@ class ModelInterface(Protocol[ActionType, TargetType]):
         outputs = {k: v.squeeze(0) for k, v in outputs.items()}
         return self.decode_output(outputs)
     
-    @property
-    def save_checkpoint(self) -> Optional[callable]:
-        """Optional method to save model checkpoint."""
-        return None
+    def save_checkpoint(self, path: str) -> None:
+        """Default implementation to save model checkpoint."""
+        torch.save({
+            'model_state_dict': self.model.state_dict(),
+            'device': next(self.model.parameters()).device
+        }, path)
     
-    @property
-    def load_checkpoint(self) -> Optional[callable]:
-        """Optional method to load model checkpoint."""
-        return None
+    def load_checkpoint(self, path: str) -> None:
+        """Default implementation to load model checkpoint."""
+        checkpoint = torch.load(path)
+        self.model.load_state_dict(checkpoint['model_state_dict'])
+        self.model.to(checkpoint['device'])
+        self.model.eval()
 
 @dataclass
 class TrainingExample(Generic[ActionType, TargetType]):
@@ -182,8 +187,8 @@ class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType]):
         batch_size: int,
         steps_per_iteration: int,
         num_simulations: int,
-        max_buffer_size: int,
         checkpoint_frequency: int,
+        checkpoints_folder: Optional[str] = None,
         evaluate_against_agent: Optional[Callable[[State], Agent[ActionType]]] = None,
         eval_frequency: int = 5,
         verbose: bool = True
@@ -196,14 +201,18 @@ class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType]):
             batch_size: Training batch size
             steps_per_iteration: Number of optimization steps per iteration
             num_simulations: Number of MCTS simulations per move
-            max_buffer_size: Maximum number of examples in replay buffer
             checkpoint_frequency: Save checkpoint every N iterations
+            checkpoints_folder: Optional folder to store checkpoints in
             evaluate_against_agent: Optional function that creates an agent to evaluate against
             eval_frequency: How often to evaluate (if evaluate_against_agent is set)
             verbose: Whether to print detailed progress
         """
         start_time = time.time()
         best_win_rate = 0.0
+        
+        # Create checkpoints directory if specified
+        if checkpoints_folder:
+            os.makedirs(checkpoints_folder, exist_ok=True)
         
         for iteration in range(num_iterations):
             iter_start = time.time()
@@ -257,12 +266,17 @@ class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType]):
                 # Save best model
                 if stats['agent1_win_rate'] > best_win_rate:
                     best_win_rate = stats['agent1_win_rate']
-                    if self.model.save_checkpoint:
-                        self.model.save_checkpoint('best_model.pt')
+                    best_model_path = 'best_model.pt'
+                    if checkpoints_folder:
+                        best_model_path = os.path.join(checkpoints_folder, best_model_path)
+                    self.model.save_checkpoint(best_model_path)
             
             # 4. Checkpointing
-            if (iteration + 1) % checkpoint_frequency == 0 and self.model.save_checkpoint:
-                self.model.save_checkpoint(f'checkpoint_{iteration+1}.pt')
+            if (iteration + 1) % checkpoint_frequency == 0:
+                checkpoint_path = f'checkpoint_{iteration+1}.pt'
+                if checkpoints_folder:
+                    checkpoint_path = os.path.join(checkpoints_folder, checkpoint_path)
+                self.model.save_checkpoint(checkpoint_path)
             
             # 5. Log iteration summary
             if verbose:
