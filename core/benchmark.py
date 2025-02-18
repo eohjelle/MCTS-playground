@@ -1,15 +1,6 @@
-from typing import Protocol, TypeVar, List, Dict, Callable
+from typing import Dict, Callable
 from core.tree_search import ActionType, State
-
-class Agent(Protocol[ActionType]):
-    """Protocol for agents that can play games."""
-    def __call__(self, num_simulations: int) -> ActionType:
-        """Select an action using num_simulations."""
-        pass
-    
-    def update_root(self, actions: List[ActionType]) -> None:
-        """Update the agent's state after actions are taken."""
-        pass
+from core.agent import Agent
 
 def benchmark(
     create_agent1: Callable[[State], Agent[ActionType]],

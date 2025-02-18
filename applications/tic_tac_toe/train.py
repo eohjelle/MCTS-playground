@@ -1,6 +1,7 @@
 import torch
 from core.implementations.AlphaZero import AlphaZeroTrainer
 from core.implementations.MCTS import MCTS
+from core.agent import RandomAgent
 from applications.tic_tac_toe.model import TicTacToeModel
 from applications.tic_tac_toe.game_state import TicTacToeState
 
@@ -11,6 +12,8 @@ def main():
     
     # Create model and trainer
     model = TicTacToeModel(device=device)
+    model.load_checkpoint("applications/tic_tac_toe/checkpoints/model.pt")
+
     trainer = AlphaZeroTrainer(
         model=model,
         initial_state_fn=TicTacToeState,
@@ -18,7 +21,7 @@ def main():
         dirichlet_alpha=0.3,  # Lower alpha = more concentrated noise
         dirichlet_epsilon=0.25,  # 25% noise in prior probabilities
         temperature=0.2,
-        replay_buffer_max_size=1000  # Maximum number of examples in replay buffer
+        replay_buffer_max_size=100000  # Maximum number of examples in replay buffer
     )
     
     # Training hyperparameters
@@ -26,12 +29,12 @@ def main():
         num_iterations=10,
         games_per_iteration=10,
         batch_size=32,
-        steps_per_iteration=10,
+        steps_per_iteration=100,
         num_simulations=100,
-        checkpoint_frequency=2,
+        checkpoint_frequency=10,
         checkpoints_folder="applications/tic_tac_toe/checkpoints",
-        evaluate_against_agent=lambda state: MCTS(state),
-        eval_frequency=10,
+        evaluate_against_agent=lambda state: RandomAgent(state),
+        eval_frequency=1,
         verbose=True
     )
 

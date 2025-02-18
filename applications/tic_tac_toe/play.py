@@ -1,16 +1,16 @@
-import random
-from typing import Tuple, Optional, Union, TypeVar
-from core.tree_search import TreeSearch, ValueType
-from core.implementations.MCTS import MCTS, MCTSValue
-from core.implementations.AlphaZero import AlphaZero, AlphaZeroValue
+from typing import Tuple, Union
+from core.implementations.MCTS import MCTS
+from core.implementations.AlphaZero import AlphaZero, AlphaZeroModelAgent
 from applications.tic_tac_toe.game_state import TicTacToeState
 from applications.tic_tac_toe.model import TicTacToeModel
 import torch
+import os
 
 # Type alias for agents we support
 TicTacToeAgent = Union[
     MCTS[Tuple[int, int]],
-    AlphaZero[Tuple[int, int]]
+    AlphaZero[Tuple[int, int]],
+    AlphaZeroModelAgent[Tuple[int, int]]
 ]
 
 def print_board(state: TicTacToeState) -> None:
@@ -88,16 +88,16 @@ def main():
     
     # Get agent type
     while True:
-        agent_type = input("Choose agent type (mcts/alphazero): ").lower()
-        if agent_type in ['mcts', 'alphazero']:
+        agent_type = input("Choose agent type (mcts/alphazero/model): ").lower()
+        if agent_type in ['mcts', 'alphazero', 'model']:
             break
-        print("Please enter mcts or alphazero")
+        print("Please enter mcts or alphazero or model")
     
     # Create agent
     initial_state = TicTacToeState()
     if agent_type == 'mcts':
         agent = MCTS(initial_state)
-    else:
+    elif agent_type == 'alphazero':
         # Use CUDA if available
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         model = TicTacToeModel(device=device)
@@ -107,6 +107,12 @@ def main():
             model=model,
             temperature=0.1  # Always select most visited action
         )
+    elif agent_type == 'model':
+        model = TicTacToeModel(device=torch.device('mps')) # Todo: Make this device agnostic
+        if os.path.exists("applications/tic_tac_toe/checkpoints/model.pt"):
+            model.load_checkpoint("applications/tic_tac_toe/checkpoints/model.pt")
+        agent = AlphaZeroModelAgent(initial_state, model)
+
     
     # Play game
     play_game(agent, human_player)

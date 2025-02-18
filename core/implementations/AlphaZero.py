@@ -6,6 +6,8 @@ import torch.nn.functional as F
 import numpy as np
 from core.tree_search import ActionType, State, Node, TreeSearch
 from core.model import TreeSearchTrainer, ModelInterface, TrainingExample, ReplayBuffer
+from core.agent import Agent
+import random
 
 @dataclass
 class AlphaZeroValue:
@@ -291,3 +293,15 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTa
         }
         
         return total_loss, metrics
+    
+
+class AlphaZeroModelAgent(Agent[ActionType]):
+    """Agent that uses a model (no tree search) to select actions."""
+    def __init__(self, initial_state: State[ActionType], model: ModelInterface[ActionType, AlphaZeroTarget]):
+        super().__init__(initial_state)
+        self.model = model
+
+    def __call__(self, num_simulations: int) -> ActionType:
+        policy, _ = self.model.predict(self.root.state)  # Access the state inside the node
+        keys, probs = zip(*policy.items())
+        return random.choices(keys, weights=probs, k=1)[0]

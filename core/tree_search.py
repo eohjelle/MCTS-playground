@@ -42,11 +42,14 @@ class Node(Generic[ActionType, ValueType]):
     def is_leaf(self) -> bool:
         return len(self.children) == 0
 
-    def expand(self) -> None:
-        for action in self.state.get_legal_actions():
+    def expand(self, actions: Optional[List[ActionType]] = None) -> None:
+        if actions is None:
+            actions = self.state.get_legal_actions()
+        for action in actions:
             new_state = self.state.apply_action(action)
             child = Node(new_state, parent=self)
             self.children[action] = child
+        
 
 class TreeSearch(Protocol[ActionType, ValueType, EvaluationType]):
     """Protocol for tree search algorithms like MCTS."""
