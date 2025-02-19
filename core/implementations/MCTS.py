@@ -44,10 +44,10 @@ class MCTS(TreeSearch[ActionType, MCTSValue, Tuple[MCTSValue, float]], Generic[A
     
     def evaluate(self, node: Node[ActionType, MCTSValue]) -> Tuple[MCTSValue, float]:
         """Evaluate a state using random rollouts."""
-        if node.state.is_terminal():
-            return MCTSValue(), node.state.get_reward(node.state.current_player)
-
         perspective_player = node.state.current_player
+
+        if node.state.is_terminal():
+            return MCTSValue(player=perspective_player), node.state.get_reward(perspective_player)
 
         # Do a random rollout
         current_state = node.state

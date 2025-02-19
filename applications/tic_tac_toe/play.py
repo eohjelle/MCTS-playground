@@ -1,8 +1,10 @@
-from typing import Tuple, Union
+from typing import Tuple, Union, Optional
 from core.implementations.MCTS import MCTS
 from core.implementations.AlphaZero import AlphaZero, AlphaZeroModelAgent
+from core.agent import RandomAgent
 from applications.tic_tac_toe.game_state import TicTacToeState
-from applications.tic_tac_toe.model import TicTacToeModel
+from applications.tic_tac_toe.mlp_model import TicTacToeModelInterface
+from applications.tic_tac_toe.transformer_model import TicTacToeTransformerInterface
 import torch
 import os
 
@@ -10,7 +12,8 @@ import os
 TicTacToeAgent = Union[
     MCTS[Tuple[int, int]],
     AlphaZero[Tuple[int, int]],
-    AlphaZeroModelAgent[Tuple[int, int]]
+    AlphaZeroModelAgent[Tuple[int, int]],
+    RandomAgent[Tuple[int, int]]
 ]
 
 def print_board(state: TicTacToeState) -> None:
@@ -37,85 +40,123 @@ def get_human_action(state: TicTacToeState) -> Tuple[int, int]:
         except ValueError:
             print("Please enter numbers between 0 and 2.")
 
-def play_game(
-    agent: TicTacToeAgent,
-    human_player: int = -1,
-    num_simulations: int = 100
-) -> None:
-    """Play a game of Tic-Tac-Toe against the agent.
+def create_agent(initial_state: TicTacToeState, agent_type: str) -> Optional[TicTacToeAgent]:
+    """Create an agent of the specified type.
     
     Args:
-        agent: The tree search agent to play against
-        human_player: 1 for X, -1 for O (default: -1)
-        num_simulations: Number of simulations per move for the agent
+        initial_state: The initial game state
+        agent_type: One of 'human', 'mcts', 'alphazero', 'model', or 'random'
+    
+    Returns:
+        The created agent, or None if agent_type is 'human'
+    """
+    if agent_type == 'human':
+        return None
+    elif agent_type == 'mcts':
+        return MCTS(initial_state)
+    elif agent_type == 'random':
+        return RandomAgent(initial_state)
+    else:  # alphazero or model
+        # Get model type
+        while True:
+            model_type = input("Choose model type (mlp/transformer): ").lower()
+            if model_type in ['mlp', 'transformer']:
+                break
+            print("Please enter mlp or transformer")
+            
+        # Setup device and model
+        device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
+        if model_type == 'mlp':
+            model = TicTacToeModelInterface(device=device)
+        else:  # transformer
+            model = TicTacToeTransformerInterface(device=device)
+            
+        # Load checkpoint if it exists
+        if os.path.exists(f"applications/tic_tac_toe/checkpoints/{model_type}/best_model.pt"):
+            model.load_checkpoint(f"applications/tic_tac_toe/checkpoints/{model_type}/best_model.pt")
+            
+        # Create appropriate agent type
+        if agent_type == 'alphazero':
+            return AlphaZero(
+                initial_state=initial_state,
+                model=model,
+                temperature=0.1
+            )
+        else:  # model
+            return AlphaZeroModelAgent(initial_state, model)
+
+def play_game(
+    x_agent: Optional[TicTacToeAgent],
+    o_agent: Optional[TicTacToeAgent],
+    num_simulations: int = 100
+) -> None:
+    """Play a game of Tic-Tac-Toe between two players.
+    
+    Args:
+        x_agent: Agent for X player (None for human)
+        o_agent: Agent for O player (None for human)
+        num_simulations: Number of simulations per move for tree search agents
     """
     state = TicTacToeState()
     print("\nWelcome to Tic-Tac-Toe!")
-    print("You are", "X" if human_player == 1 else "O")
+    print("X:", "Human" if x_agent is None else type(x_agent).__name__)
+    print("O:", "Human" if o_agent is None else type(o_agent).__name__)
     print("Use coordinates to make moves (0-2 for both row and column)")
     print_board(state)
     
     while not state.is_terminal():
-        if state.current_player == human_player:
+        current_agent = x_agent if state.current_player == 1 else o_agent
+        
+        if current_agent is None:
+            # Human player's turn
             action = get_human_action(state)
         else:
-            # Run simulations and get best action
-            action = agent(num_simulations)
-            print(f"Agent plays: {action}")
+            # Agent's turn
+            action = current_agent(num_simulations)
+            print(f"Player {state.current_player} plays: {action}")
         
-        # Apply action and update agent's tree
+        # Apply action and update both agents' trees
         state = state.apply_action(action)
-        agent.update_root([action])
+        if x_agent is not None:
+            x_agent.update_root([action])
+        if o_agent is not None:
+            o_agent.update_root([action])
         print_board(state)
     
     # Game over
-    reward = state.get_reward(human_player)
+    reward = state.get_reward(1)  # Get reward from X's perspective
     if reward > 0:
-        print("You win!")
+        print("X wins!")
     elif reward < 0:
-        print("Agent wins!")
+        print("O wins!")
     else:
         print("Draw!")
 
 def main():
-    # Get player choice
-    while True:
-        choice = input("Choose your player (X/O): ").upper()
-        if choice in ['X', 'O']:
-            break
-        print("Please enter X or O")
-    human_player = 1 if choice == 'X' else -1
+    # Get player types
+    valid_types = ['human', 'mcts', 'alphazero', 'model', 'random']
     
-    # Get agent type
+    # Get X player type
     while True:
-        agent_type = input("Choose agent type (mcts/alphazero/model): ").lower()
-        if agent_type in ['mcts', 'alphazero', 'model']:
+        x_type = input("Choose X player type (human/mcts/alphazero/model/random): ").lower()
+        if x_type in valid_types:
             break
-        print("Please enter mcts or alphazero or model")
+        print(f"Please enter one of: {', '.join(valid_types)}")
     
-    # Create agent
+    # Get O player type
+    while True:
+        o_type = input("Choose O player type (human/mcts/alphazero/model/random): ").lower()
+        if o_type in valid_types:
+            break
+        print(f"Please enter one of: {', '.join(valid_types)}")
+    
+    # Create agents
     initial_state = TicTacToeState()
-    if agent_type == 'mcts':
-        agent = MCTS(initial_state)
-    elif agent_type == 'alphazero':
-        # Use CUDA if available
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        model = TicTacToeModel(device=device)
-        # Use temperature 0 for best play (always select most visited action)
-        agent = AlphaZero(
-            initial_state=initial_state,
-            model=model,
-            temperature=0.1  # Always select most visited action
-        )
-    elif agent_type == 'model':
-        model = TicTacToeModel(device=torch.device('mps')) # Todo: Make this device agnostic
-        if os.path.exists("applications/tic_tac_toe/checkpoints/model.pt"):
-            model.load_checkpoint("applications/tic_tac_toe/checkpoints/model.pt")
-        agent = AlphaZeroModelAgent(initial_state, model)
-
+    x_agent = create_agent(initial_state, x_type)
+    o_agent = create_agent(initial_state, o_type)
     
     # Play game
-    play_game(agent, human_player)
+    play_game(x_agent, o_agent)
 
 if __name__ == "__main__":
     main() 

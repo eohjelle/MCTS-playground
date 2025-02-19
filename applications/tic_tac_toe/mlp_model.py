@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict
+from typing import Dict, Tuple
+from applications.tic_tac_toe.model import TicTacToeBaseModelInterface
+from applications.tic_tac_toe.game_state import TicTacToeState
+
 
 class TicTacToeMLP(nn.Module):
     def __init__(self, hidden_size: int = 64, device: torch.device = torch.device('cpu')):
@@ -40,3 +43,32 @@ class TicTacToeMLP(nn.Module):
             "policy": policy_logits,
             "value": value
         }
+
+
+class TicTacToeModelInterface(TicTacToeBaseModelInterface):
+    def __init__(self, device: torch.device = torch.device('cpu')):
+        self.model = TicTacToeMLP(device=device)
+        # Initialize weights with small random values
+        for param in self.model.parameters():
+            nn.init.normal_(param, mean=0.0, std=0.02)
+        self.model.eval()  # Set to evaluation mode
+    
+    def encode_state(self, state: TicTacToeState) -> torch.Tensor:
+        """Convert board state to neural network input tensor."""
+        # Create two 3x3 planes: one for X positions, one for O positions
+        x_plane = torch.zeros(3, 3, device=self.model._device)
+        o_plane = torch.zeros(3, 3, device=self.model._device)
+        
+        for i in range(3):
+            for j in range(3):
+                if state.board[i][j] == 'X':
+                    x_plane[i, j] = 1.0
+                elif state.board[i][j] == 'O':
+                    o_plane[i, j] = 1.0
+        
+        # Stack and flatten the planes
+        # If it's O's turn, swap the planes so O is always "our" pieces
+        if state.current_player == -1:  # O's turn
+            x_plane, o_plane = o_plane, x_plane
+            
+        return torch.cat([x_plane.flatten(), o_plane.flatten()])

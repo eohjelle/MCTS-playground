@@ -30,7 +30,7 @@ class ModelInterface(Protocol[ActionType, TargetType]):
         """Convert a single state to model input tensor."""
         pass
 
-    def decode_output(self, output: Dict[str, torch.Tensor]) -> TargetType:
+    def decode_output(self, output: Dict[str, torch.Tensor], state: State) -> TargetType:
         """Convert raw model outputs to game-specific target format.
         
         This is used during inference to convert model outputs (dictionary of tensors)
@@ -52,7 +52,7 @@ class ModelInterface(Protocol[ActionType, TargetType]):
         encoded_state = self.encode_state(state).unsqueeze(0)
         outputs = self.model(encoded_state)
         outputs = {k: v.squeeze(0) for k, v in outputs.items()}
-        return self.decode_output(outputs)
+        return self.decode_output(outputs, state)
     
     def save_checkpoint(self, path: str) -> None:
         """Default implementation to save model checkpoint."""
@@ -147,6 +147,9 @@ class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType]):
             # Make the move
             state = state.apply_action(action)
             tree_search.update_root([action])
+
+        # Append final game state, no action taken
+        game.append((tree_search.root, None))
         
         return game
     
@@ -330,7 +333,7 @@ class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType]):
         metrics_sum: Dict[str, float] = {}
         
         for step in range(steps_per_iteration):
-            if verbose and (step + 1) % 20 == 0:
+            if verbose and (step + 1) % 500 == 0:
                 print(f"Training step {step + 1}/{steps_per_iteration}")
             
             # Sample random batch
