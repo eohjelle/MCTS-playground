@@ -116,12 +116,13 @@ class TicTacToeTransformer(nn.Module):
         self.final_norm = nn.LayerNorm(embed_dim)
 
         # Policy head: maps each position's embedding to a single logit
-        self.policy_head = nn.Linear(embed_dim, 1)
+        self.policy_contraction = nn.Parameter(torch.randn(9, embed_dim, 9))
+        self.policy_bias = nn.Parameter(torch.randn(1, 9))
 
         # Value head: contracts board position and embedding dimensions to hidden features
         # then maps to a single value estimate
         self.value_contraction = nn.Parameter(torch.randn(9, embed_dim, value_head_hidden_dim))
-        self.value_bias = nn.Parameter(torch.randn(value_head_hidden_dim))
+        self.value_bias = nn.Parameter(torch.randn(1, value_head_hidden_dim))
         self.value_final = nn.Linear(value_head_hidden_dim, 1)
 
     def forward(self, x):
@@ -142,7 +143,7 @@ class TicTacToeTransformer(nn.Module):
 
         # Transform board state through transformer backbone
         x = self.input_embedding(x)  # (batch_size, 9, embed_dim)
-        pos_emb = self.pos_embedding(torch.arange(9, device=x.device)).unsqueeze(0)  # (1, 9, embed_dim)
+        pos_emb = self.pos_embedding(torch.arange(9, device=x.device).unsqueeze(0))  # (1, 9, embed_dim)
         x = x + pos_emb  # Add positional embeddings
         for transformer in self.transformer_blocks:
             x = transformer(x)       # (batch_size, 9, embed_dim)
@@ -151,10 +152,10 @@ class TicTacToeTransformer(nn.Module):
         x = self.final_norm(x)
 
         # Policy head outputs one logit per position
-        policy = self.policy_head(x).squeeze(-1)  # (batch_size, 9)
+        policy = torch.einsum('b s e, s e p -> b p', x, self.policy_contraction) + self.policy_bias
         
         # Value head contracts board state to hidden features then to single value
-        hidden = torch.einsum('b s e, s e f -> b f', x, self.value_contraction) + self.value_bias
+        hidden = torch.einsum('b s e, s e h -> b h', x, self.value_contraction) + self.value_bias
         value = torch.tanh(self.value_final(F.gelu(hidden)))  # (batch_size, 1)
         
         return {

@@ -74,9 +74,11 @@ def create_agent(
         # Setup device and model
         device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
         if model_type == 'mlp':
-            model = TicTacToeModelInterface(device=device)
+            from applications.tic_tac_toe.train import mlp_model_params
+            model = TicTacToeModelInterface(device=device, **mlp_model_params)
         else:  # transformer
-            model = TicTacToeTransformerInterface(device=device)
+            from applications.tic_tac_toe.train import transformer_model_params
+            model = TicTacToeTransformerInterface(device=device, **transformer_model_params)
             
         # Load checkpoint if it exists
         try:

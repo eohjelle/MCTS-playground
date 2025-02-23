@@ -16,14 +16,14 @@ alphazero_config = AlphaZeroConfig(
     exploration_constant=1.0,
     dirichlet_alpha=0.3,
     dirichlet_epsilon=0.25,
-    temperature=0.5
+    temperature=1.0
 )
 
 # AlphaZero evaluation parameters
 alphazero_eval_config = AlphaZeroConfig(
     exploration_constant=1.0,
-    dirichlet_alpha=0.3,
-    dirichlet_epsilon=0.25,
+    dirichlet_alpha=0.0,
+    dirichlet_epsilon=0.0,
     temperature=0.0
 )
 
@@ -34,12 +34,12 @@ mlp_model_params = {
 
 # Transformer model parameters, if using Transformer model
 transformer_model_params = {
-    'attention_layers': 2,
-    'embed_dim': 9,
-    'num_heads': 3,
-    'feedforward_dim': 27,
-    'value_head_hidden_dim': 3,
-    'dropout': 0.1
+    'attention_layers': 1,
+    'embed_dim': 8,
+    'num_heads': 2,
+    'feedforward_dim': 32,
+    'value_head_hidden_dim': 4,
+    'dropout': 0.0
 }
 
 # Trainer parameters
@@ -52,13 +52,13 @@ optimizer_params = {
     'lr': 1e-3,
     'betas': (0.9, 0.999),
     'eps': 1e-8,
-    'weight_decay': 0.1,
+    'weight_decay': 1e-4,
     'amsgrad': False
 }
 
 # Training parameters
 training_params = {
-    'num_iterations': 50,
+    'num_iterations': 100,
     'games_per_iteration': 10,
     'batch_size': 256,
     'steps_per_iteration': 100,
@@ -163,7 +163,7 @@ def main():
             print(f"Using artifacts directory: {run_artifacts_dir}")
             
             # Load the final model artifact
-            model_artifact = wandb_run.use_artifact(f'model-final:latest')
+            model_artifact = wandb_run.use_artifact(f'{args.model}_model:latest')
             model_path = model_artifact.download(root=run_artifacts_dir)
             model.load_checkpoint(os.path.join(model_path, f'{args.model}_model.pt'))
             print(f"Loaded model from wandb artifact")
