@@ -92,12 +92,15 @@ class TicTacToeTransformer(nn.Module):
             embed_dim: Dimension of token embeddings
             num_heads: Number of attention heads per layer
             feedforward_dim: Hidden dimension of transformer feedforward networks
-            value_head_hidden_dim: Hidden dimension of value head after board position contraction
+            value_head_hidden_dim: Hidden dimension of value head
             dropout: Dropout probability for all layers
         """
         super().__init__()
         # Embed each position's X/O state into a learned embedding
         self.input_embedding = nn.Embedding(3, embed_dim)
+        
+        # Add learned positional embeddings
+        self.pos_embedding = nn.Embedding(9, embed_dim)
         
         # Stack of transformer blocks that process the board state
         self.transformer_blocks = nn.Sequential(*[
@@ -108,6 +111,9 @@ class TicTacToeTransformer(nn.Module):
                 dropout
             ) for _ in range(attention_layers)
         ])
+
+        # Final layer norm
+        self.final_norm = nn.LayerNorm(embed_dim)
 
         # Policy head: maps each position's embedding to a single logit
         self.policy_head = nn.Linear(embed_dim, 1)
@@ -136,8 +142,13 @@ class TicTacToeTransformer(nn.Module):
 
         # Transform board state through transformer backbone
         x = self.input_embedding(x)  # (batch_size, 9, embed_dim)
+        pos_emb = self.pos_embedding(torch.arange(9, device=x.device)).unsqueeze(0)  # (1, 9, embed_dim)
+        x = x + pos_emb  # Add positional embeddings
         for transformer in self.transformer_blocks:
             x = transformer(x)       # (batch_size, 9, embed_dim)
+        
+        # Apply final layer norm
+        x = self.final_norm(x)
 
         # Policy head outputs one logit per position
         policy = self.policy_head(x).squeeze(-1)  # (batch_size, 9)
@@ -157,10 +168,10 @@ class TicTacToeTransformerInterface(TicTacToeBaseModelInterface):
         self, 
         device: torch.device,
         attention_layers: int = 2,
-        embed_dim: int = 16,
-        num_heads: int = 4,
-        feedforward_dim: int = 64,
-        value_head_hidden_dim: int = 64,
+        embed_dim: int = 9,
+        num_heads: int = 3,
+        feedforward_dim: int = 27,
+        value_head_hidden_dim: int = 3,
         dropout: float = 0.1
     ):
         self.model = TicTacToeTransformer(
@@ -172,16 +183,13 @@ class TicTacToeTransformerInterface(TicTacToeBaseModelInterface):
             dropout=dropout
         )
         self.model.to(device)
-        # Initialize weights with small random values
-        for param in self.model.parameters():
-            nn.init.normal_(param, mean=0.0, std=0.02)
         self.model.eval()  # Set to evaluation mode
     
     def encode_state(self, state: TicTacToeState) -> torch.Tensor:
         """Convert board state to neural network input tensor."""
         # Create tensor of board state indices (0=empty, 1=X, 2=O)
         device = next(self.model.parameters()).device
-        board_tensor = torch.zeros(9, device=device)
+        board_tensor = torch.zeros(9, device=device, dtype=torch.int64)
         
         for i in range(3):
             for j in range(3):
@@ -190,10 +198,11 @@ class TicTacToeTransformerInterface(TicTacToeBaseModelInterface):
                     board_tensor[idx] = 1
                 elif state.board[i][j] == 'O':
                     board_tensor[idx] = 2
-        
-        # If it's O's turn, swap X and O encodings so O is always "our" pieces
+    
+        # If it's O's turn, swap X and O encodings so 1.0 correspond to "our" pieces
         if state.current_player == -1:
-            board_tensor = torch.where(board_tensor == 1, torch.tensor(2., device=device), board_tensor)
-            board_tensor = torch.where(board_tensor == 2, torch.tensor(1., device=device), board_tensor)
-            
-        return board_tensor.long()  # Embedding layer expects long tensor
+            board_tensor = torch.where(board_tensor == 1, torch.tensor(3, device=device), board_tensor)
+            board_tensor = torch.where(board_tensor == 2, torch.tensor(1, device=device), board_tensor)
+            board_tensor = torch.where(board_tensor == 3, torch.tensor(2, device=device), board_tensor)
+
+        return board_tensor  # Embedding layer expects long tensor

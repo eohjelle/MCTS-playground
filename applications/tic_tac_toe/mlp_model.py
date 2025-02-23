@@ -46,11 +46,8 @@ class TicTacToeMLP(nn.Module):
 
 
 class TicTacToeModelInterface(TicTacToeBaseModelInterface):
-    def __init__(self, device: torch.device = torch.device('cpu')):
-        self.model = TicTacToeMLP(device=device)
-        # Initialize weights with small random values
-        for param in self.model.parameters():
-            nn.init.normal_(param, mean=0.0, std=0.02)
+    def __init__(self, hidden_size: int = 64, device: torch.device = torch.device('cpu')):
+        self.model = TicTacToeMLP(hidden_size=hidden_size, device=device)
         self.model.eval()  # Set to evaluation mode
     
     def encode_state(self, state: TicTacToeState) -> torch.Tensor:

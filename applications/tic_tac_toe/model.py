@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 from typing import Dict, Tuple
-from core.model import ModelInterface
+from core.model_interface import ModelInterface
 from core.implementations.AlphaZero import AlphaZeroTarget
 from applications.tic_tac_toe.game_state import TicTacToeState
 

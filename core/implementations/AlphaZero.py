@@ -1,11 +1,12 @@
 from dataclasses import dataclass
 import math
-from typing import Dict, List, Optional, Tuple, Generic
+from typing import Dict, List, Optional, Tuple, Generic, TypedDict
 import torch
 import torch.nn.functional as F
 import numpy as np
-from core.tree_search import ActionType, State, Node, TreeSearch
-from core.model import TreeSearchTrainer, ModelInterface, TrainingExample, ReplayBuffer
+from core.tree_search import State, Node, TreeSearch
+from core.trainer import TreeSearchTrainer, ModelInterface, TrainingExample, ReplayBuffer
+from core.types import ActionType
 from core.agent import Agent
 import random
 
@@ -25,6 +26,12 @@ class AlphaZeroValue:
 AlphaZeroTarget = Tuple[Dict[ActionType, float], float]  # (policy probabilities, value)
 AlphaZeroEvaluation = Tuple[Dict[ActionType, float], float, int]  # (policy probabilities, value, player)
 
+class AlphaZeroConfig(TypedDict):
+    exploration_constant: float
+    dirichlet_alpha: float
+    dirichlet_epsilon: float
+    temperature: float
+
 class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation], Generic[ActionType]):
     """AlphaZero tree search implementation.
     
@@ -40,12 +47,10 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation], Gen
     """
     def __init__(
         self, 
-        initial_state: State[ActionType], 
+        initial_state: State[ActionType],
+        num_simulations: int,
         model: ModelInterface[ActionType, AlphaZeroTarget],
-        exploration_constant: float = 1.0,
-        dirichlet_alpha: float = 0.3,
-        dirichlet_epsilon: float = 0.25,
-        temperature: float = 1.0
+        params: AlphaZeroConfig
     ):
         """Initialize AlphaZero tree search.
         
@@ -54,10 +59,10 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation], Gen
             model: A forward pass of the underlying model must return a dictionary:
                 - "policy": Policy logits [batch_size, num_actions]
                 - "value": Value predictions [batch_size, 1]
-            exploration_constant: Controls exploration in PUCT formula
-            dirichlet_alpha: Alpha parameter for Dirichlet noise
-            dirichlet_epsilon: Weight of Dirichlet noise in root prior
-            temperature: Controls exploration in action selection (higher means more uniform)
+                - exploration_constant: Controls exploration in PUCT formula
+                - dirichlet_alpha: Alpha parameter for Dirichlet noise
+                - dirichlet_epsilon: Weight of Dirichlet noise in root prior
+                - temperature: Controls exploration in action selection (higher means more uniform)
         """
         self.root = Node(
             initial_state,
@@ -68,11 +73,12 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation], Gen
                 player=initial_state.current_player
             )
         )
+        self.num_simulations = num_simulations
         self._model = model
-        self._exploration_constant = exploration_constant
-        self._dirichlet_alpha = dirichlet_alpha
-        self._dirichlet_epsilon = dirichlet_epsilon
-        self._temperature = temperature
+        self._exploration_constant = params.get("exploration_constant", 1.0)
+        self._dirichlet_alpha = params.get("dirichlet_alpha", 0.3)
+        self._dirichlet_epsilon = params.get("dirichlet_epsilon", 0.25)
+        self._temperature = params.get("temperature", 0.9)
     
     def _set_prior_probabilities(self, node: Node[ActionType, AlphaZeroValue], policy: Dict[ActionType, float]) -> None:
         """Set prior probabilities for node's children.
@@ -81,19 +87,25 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation], Gen
             node: Node whose children need prior probabilities set
             policy: Dictionary mapping actions to their prior probabilities
         """
-        legal_actions = node.state.get_legal_actions()
-        noise = np.random.dirichlet([self._dirichlet_alpha] * len(legal_actions)) if self._dirichlet_epsilon > 0 else None
+        # Get legal actions
+        actions = node.children.keys()
+        
+        # Only apply Dirichlet noise at root node
+        if node == self.root and self._dirichlet_epsilon > 0:
+            noise = np.random.dirichlet([self._dirichlet_alpha] * len(actions))
+            noise_dict = {action: n for action, n in zip(actions, noise)}
+        else:
+            noise_dict = None
         
         for action, child in node.children.items():
             prior = policy.get(action, 0.0)
-            if noise is not None:
-                prior = (1 - self._dirichlet_epsilon) * prior + self._dirichlet_epsilon * noise[legal_actions.index(action)]
-            
+            if noise_dict is not None:
+                prior = (1 - self._dirichlet_epsilon) * prior + self._dirichlet_epsilon * noise_dict[action]
             child.value = AlphaZeroValue(
                 visit_count=0,
                 total_value=0.0,
                 prior_probability=prior,
-                player=child.state.current_player  # Opponent's turn
+                player=child.state.current_player
             )
     
     def evaluate(self, node: Node[ActionType, AlphaZeroValue]) -> AlphaZeroEvaluation:
@@ -174,53 +186,38 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation], Gen
         idx = np.random.choice(len(actions), p=probabilities)
         return actions[idx]
 
-class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTarget]):
+class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTarget, AlphaZeroConfig]):
     def __init__(
         self,
+        *,
         model: ModelInterface[ActionType, AlphaZeroTarget],
-        initial_state_fn: callable,
-        optimizer: Optional[torch.optim.Optimizer] = None,
         replay_buffer: Optional[ReplayBuffer] = None,
         replay_buffer_max_size: int = 100000,
-        exploration_constant: float = 1.0,
-        dirichlet_alpha: float = 0.3,
-        dirichlet_epsilon: float = 0.25,
-        temperature: float = 1.0
     ):
         """Initialize AlphaZero trainer.
         
         Args:
             model: Neural network for state evaluation
-            initial_state_fn: Function that returns a fresh game state
-            optimizer: Optimizer for model parameters (defaults to Adam)
             replay_buffer: Optional existing replay buffer to start with
             replay_buffer_max_size: Maximum number of examples in replay buffer
-            exploration_constant: Controls exploration in PUCT formula
-            dirichlet_alpha: Alpha parameter for Dirichlet noise
-            dirichlet_epsilon: Weight of Dirichlet noise in root prior
-            temperature: Controls exploration in action selection (higher means more uniform)
         """
         self.model = model
-        self.initial_state_fn = initial_state_fn
-        self.optimizer = optimizer if optimizer is not None else torch.optim.Adam(model.model.parameters())
         self.replay_buffer = replay_buffer
         self.replay_buffer_max_size = replay_buffer_max_size
-        
-        # Store exploration parameters
-        self.exploration_constant = exploration_constant
-        self.dirichlet_alpha = dirichlet_alpha
-        self.dirichlet_epsilon = dirichlet_epsilon
-        self.temperature = temperature
     
-    def create_tree_search(self, state: State[ActionType]) -> TreeSearch:
-        """Create an AlphaZero instance for the given state."""
+    def create_tree_search(self, state: State[ActionType], num_simulations: int, params: AlphaZeroConfig) -> TreeSearch:
+        """Create an AlphaZero instance for the given state.
+        
+        Args:
+            state: The initial state to create the tree search for
+            num_simulations: Number of simulations to run
+            params: Parameters for the tree search
+        """
         return AlphaZero(
             initial_state=state,
+            num_simulations=num_simulations,
             model=self.model,
-            exploration_constant=self.exploration_constant,
-            dirichlet_alpha=self.dirichlet_alpha,
-            dirichlet_epsilon=self.dirichlet_epsilon,
-            temperature=self.temperature  # Use configured temperature
+            params=params
         )
     
     def extract_examples(
@@ -242,7 +239,7 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTa
         
         for node, _ in game:
             # Convert visit counts to policy
-            visits = {a: n.value.visit_count for a, n in node.children.items()}
+            visits = {a: n.value.visit_count if n.value else 0 for a, n in node.children.items()}
             total_visits = sum(visits.values())
             policy = {a: float(v/total_visits) for a, v in visits.items()}
             
@@ -295,13 +292,21 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTa
         return total_loss, metrics
     
 
-class AlphaZeroModelAgent(Agent[ActionType]):
+class AlphaZeroModelAgent(Agent[ActionType, AlphaZeroValue]):
     """Agent that uses a model (no tree search) to select actions."""
     def __init__(self, initial_state: State[ActionType], model: ModelInterface[ActionType, AlphaZeroTarget]):
-        super().__init__(initial_state)
+        self.root = Node(
+            state=initial_state,
+            value=AlphaZeroValue(
+                visit_count=0,
+                total_value=0.0,
+                prior_probability=1.0,
+                player=initial_state.current_player
+            )
+        )
         self.model = model
 
-    def __call__(self, num_simulations: int) -> ActionType:
+    def __call__(self) -> ActionType:
         policy, _ = self.model.predict(self.root.state)  # Access the state inside the node
         keys, probs = zip(*policy.items())
         return random.choices(keys, weights=probs, k=1)[0]
