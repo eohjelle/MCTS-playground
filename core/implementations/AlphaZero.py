@@ -193,6 +193,7 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTa
         model: ModelInterface[ActionType, AlphaZeroTarget],
         replay_buffer: Optional[ReplayBuffer] = None,
         replay_buffer_max_size: int = 100000,
+        value_softness: float = 0.0
     ):
         """Initialize AlphaZero trainer.
         
@@ -201,9 +202,12 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTa
             replay_buffer: Optional existing replay buffer to start with
             replay_buffer_max_size: Maximum number of examples in replay buffer
         """
-        self.model = model
-        self.replay_buffer = replay_buffer
-        self.replay_buffer_max_size = replay_buffer_max_size
+        super().__init__(
+            model=model,
+            replay_buffer=replay_buffer,
+            replay_buffer_max_size=replay_buffer_max_size
+        )
+        self.value_softness = value_softness
     
     def create_tree_search(self, state: State[ActionType], num_simulations: int, params: AlphaZeroConfig) -> TreeSearch:
         """Create an AlphaZero instance for the given state.
@@ -245,7 +249,9 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTa
             
             # Get value from game outcome
             is_same_player = node.state.current_player == final_state.current_player
-            value = float(game_outcome if is_same_player else -game_outcome)
+            outcome_value = float(game_outcome if is_same_player else -game_outcome)
+            assert node.value is not None, "Node value is None"
+            value = outcome_value * (1 - self.value_softness) + self.value_softness * node.value.mean_value
             
             examples.append(TrainingExample(
                 state=node.state,

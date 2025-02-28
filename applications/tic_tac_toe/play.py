@@ -102,9 +102,9 @@ def create_agent(
                 num_simulations=100,
                 params=AlphaZeroConfig(
                     exploration_constant=1.414,
-                    dirichlet_alpha=0.3,
-                    dirichlet_epsilon=0.25,
-                    temperature=0.5
+                    dirichlet_alpha=0.0,
+                    dirichlet_epsilon=0.0,
+                    temperature=0.0
                 )
             )
         else:  # model
