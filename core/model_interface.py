@@ -52,17 +52,27 @@ class ModelInterface(Protocol[ActionType, TargetType]):
         return self.decode_output(outputs, state)
     
     def save_checkpoint(self, path: str) -> None:
-        """Default implementation to save model checkpoint."""
+        """Save model checkpoint in a device-agnostic way."""
         torch.save({
             'model_state_dict': self.model.state_dict(),
-            'device': next(self.model.parameters()).device
+            'model_config': getattr(self.model, 'config', None)  # Save model config if available
         }, path)
     
-    def load_checkpoint(self, path: str) -> None:
-        """Default implementation to load model checkpoint."""
-        checkpoint = torch.load(path)
+    def load_checkpoint(self, path: str, device: Optional[str] = None) -> None:
+        """Load model checkpoint to the specified device or default device.
+        
+        Args:
+            path: Path to the checkpoint file
+            device: Target device to load the model onto (e.g., 'cpu', 'cuda:0')
+                    If None, will use the default device (cuda, mps, or cpu based on availability)
+        """
+        if device is None:
+            device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
+        
+        # Load checkpoint to specified device
+        checkpoint = torch.load(path, map_location=device)
         self.model.load_state_dict(checkpoint['model_state_dict'])
-        self.model.to(checkpoint['device'])
+        self.model.to(device)
         self.model.eval()
 
     def load_from_wandb_artifact(
@@ -72,12 +82,22 @@ class ModelInterface(Protocol[ActionType, TargetType]):
         root_dir: str,
         run_id: Optional[str] = None,
         model_version: str = "latest",
+        device: Optional[str] = None,
     ) -> None:
-        """Load a model from wandb artifacts."""
+        """Load a model from wandb artifacts.
+        
+        Args:
+            model_name: Name of the model
+            project: Wandb project name
+            root_dir: Directory to download artifacts to
+            run_id: Optional run ID
+            model_version: Version of the model to load
+            device: Device to load the model onto (e.g., 'cpu', 'cuda:0')
+        """
         api = wandb.Api()
         if run_id:
             artifact = api.artifact(f'{project}/{run_id}/{model_name}:{model_version}')
         else:
             artifact = api.artifact(f'{project}/{model_name}:{model_version}')
         artifact_dir = artifact.download(root=root_dir)
-        self.load_checkpoint(os.path.join(artifact_dir, f'{model_name}.pt'))
+        self.load_checkpoint(os.path.join(artifact_dir, f'{model_name}.pt'), device=device)

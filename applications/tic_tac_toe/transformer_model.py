@@ -5,72 +5,6 @@ from typing import Dict, Tuple
 from applications.tic_tac_toe.model import TicTacToeBaseModelInterface
 from applications.tic_tac_toe.game_state import TicTacToeState
 
-class TransformerEncoderBlock(nn.Module):
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        feedforward_dim: int,
-        dropout: float = 0.1,
-    ):
-        """
-        A single Transformer encoder block.
-
-        Args:
-            embed_dim (int): Dimension of the input embeddings.
-            num_heads (int): Number of attention heads.
-            feedforward_dim (int): Hidden dimension of the feedforward network.
-            dropout (float, optional): Dropout probability. Defaults to 0.1.
-        """
-        super().__init__()
-
-        # Self-Attention layer
-        self.self_attn = nn.MultiheadAttention(
-            embed_dim, num_heads, dropout=dropout, batch_first=True
-        )
-
-        # Two-layer feed-forward network
-        self.linear1 = nn.Linear(embed_dim, feedforward_dim)
-        self.linear2 = nn.Linear(feedforward_dim, embed_dim)
-
-        # Layer Normalizations (pre-norm style)
-        self.norm1 = nn.LayerNorm(embed_dim)
-        self.norm2 = nn.LayerNorm(embed_dim)
-
-        # Dropout layers
-        self.dropout_attn = nn.Dropout(dropout)
-        self.dropout_ffn = nn.Dropout(dropout)
-
-    def forward(self, x, mask=None):
-        """
-        Forward pass through a Transformer encoder block.
-        
-        Args:
-            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, embed_dim).
-            mask (torch.Tensor, optional): Attention mask of shape (batch_size, seq_len), 
-                                           or a more general shape broadcastable by MHA.
-        
-        Returns:
-            torch.Tensor: Output of the Transformer block, same shape as input x.
-        """
-        # ----- Self-Attention sub-layer -----
-        # Pre-LN
-        x_norm = self.norm1(x)
-        attn_out, _ = self.self_attn(
-            x_norm, x_norm, x_norm, attn_mask=mask, need_weights=False
-        )
-        # Residual + dropout
-        x = x + self.dropout_attn(attn_out)
-
-        # ----- Feed-Forward sub-layer -----
-        # Pre-LN
-        x_norm = self.norm2(x)
-        ff_out = self.linear2(F.gelu(self.linear1(x_norm)))
-        # Residual + dropout
-        x = x + self.dropout_ffn(ff_out)
-
-        return x
-
 
 class TicTacToeTransformer(nn.Module):
     """
@@ -83,8 +17,9 @@ class TicTacToeTransformer(nn.Module):
             embed_dim: int,
             num_heads: int,
             feedforward_dim: int,
-            value_head_hidden_dim: int,
-            dropout: float
+            dropout: float,
+            norm_first: bool = True,
+            activation: str = 'relu'
         ):
         """
         Args:
@@ -92,8 +27,8 @@ class TicTacToeTransformer(nn.Module):
             embed_dim: Dimension of token embeddings
             num_heads: Number of attention heads per layer
             feedforward_dim: Hidden dimension of transformer feedforward networks
-            value_head_hidden_dim: Hidden dimension of value head
             dropout: Dropout probability for all layers
+            norm_first: Whether to apply normalization before or after the attention and feedforward layers
         """
         super().__init__()
         # Embed each position's X/O state into a learned embedding
@@ -104,26 +39,36 @@ class TicTacToeTransformer(nn.Module):
         
         # Stack of transformer blocks that process the board state
         self.transformer_blocks = nn.Sequential(*[
-            TransformerEncoderBlock(
-                embed_dim, 
-                num_heads, 
-                feedforward_dim, 
-                dropout
+            nn.TransformerEncoderLayer(
+                d_model=embed_dim,
+                nhead=num_heads,
+                dim_feedforward=feedforward_dim,
+                dropout=dropout,
+                batch_first=True,
+                norm_first=norm_first,
+                activation=activation
             ) for _ in range(attention_layers)
         ])
 
         # Final layer norm
         self.final_norm = nn.LayerNorm(embed_dim)
 
+        # Final activation function
+        match activation:
+            case 'relu':
+                self.final_activation = nn.ReLU()
+            case 'gelu':
+                self.final_activation = nn.GELU()
+            case _:
+                raise ValueError(f"Invalid activation function: {activation}")
+
         # Policy head: maps each position's embedding to a single logit
         self.policy_contraction = nn.Parameter(torch.randn(9, embed_dim, 9))
         self.policy_bias = nn.Parameter(torch.randn(1, 9))
 
-        # Value head: contracts board position and embedding dimensions to hidden features
-        # then maps to a single value estimate
-        self.value_contraction = nn.Parameter(torch.randn(9, embed_dim, value_head_hidden_dim))
-        self.value_bias = nn.Parameter(torch.randn(1, value_head_hidden_dim))
-        self.value_final = nn.Linear(value_head_hidden_dim, 1)
+        # Value head: linear layer to map board position and embedding dimensions to a single value estimate
+        self.value_contraction = nn.Parameter(torch.randn(9, embed_dim, 1))
+        self.value_bias = nn.Parameter(torch.randn(1, 1))
 
     def forward(self, x):
         """
@@ -138,9 +83,6 @@ class TicTacToeTransformer(nn.Module):
                 policy: Action logits of shape (batch_size, 9)
                 value: Value estimates of shape (batch_size, 1), bounded between -1 and 1
         """
-        assert x.dim() == 2 and x.shape[1] == 9, f"Expected input shape (batch_size, 9), got {x.shape}"
-        assert torch.all((x >= 0) & (x <= 2)), "Input values must be 0 (empty), 1 (X), or 2 (O)"
-
         # Transform board state through transformer backbone
         x = self.input_embedding(x)  # (batch_size, 9, embed_dim)
         pos_emb = self.pos_embedding(torch.arange(9, device=x.device).unsqueeze(0))  # (1, 9, embed_dim)
@@ -150,13 +92,14 @@ class TicTacToeTransformer(nn.Module):
         
         # Apply final layer norm
         x = self.final_norm(x)
-
+        x = self.final_activation(x)
+        
         # Policy head outputs one logit per position
         policy = torch.einsum('b s e, s e p -> b p', x, self.policy_contraction) + self.policy_bias
         
-        # Value head contracts board state to hidden features then to single value
-        hidden = torch.einsum('b s e, s e h -> b h', x, self.value_contraction) + self.value_bias
-        value = torch.tanh(self.value_final(F.gelu(hidden)))  # (batch_size, 1)
+        # Value head outputs a single value
+        value = torch.einsum('b s e, s e v -> b v', x, self.value_contraction) + self.value_bias # (batch_size, 1)
+        value = torch.tanh(value)  # (batch_size, 1)
         
         return {
             "policy": policy,
@@ -172,16 +115,18 @@ class TicTacToeTransformerInterface(TicTacToeBaseModelInterface):
         embed_dim: int = 9,
         num_heads: int = 3,
         feedforward_dim: int = 27,
-        value_head_hidden_dim: int = 3,
-        dropout: float = 0.1
+        dropout: float = 0.1,
+        norm_first: bool = True,
+        activation: str = 'relu'
     ):
         self.model = TicTacToeTransformer(
             attention_layers=attention_layers,
             embed_dim=embed_dim,
             num_heads=num_heads,
             feedforward_dim=feedforward_dim,
-            value_head_hidden_dim=value_head_hidden_dim,
-            dropout=dropout
+            dropout=dropout,
+            norm_first=norm_first,
+            activation=activation
         )
         self.model.to(device)
         self.model.eval()  # Set to evaluation mode

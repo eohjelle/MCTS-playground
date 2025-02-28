@@ -5,14 +5,14 @@ from core.tree_search import State, Node, TreeSearch
 from core.benchmark import Agent, benchmark
 from core.model_interface import ModelInterface
 from core.data_structures import ReplayBuffer, TrainingExample
-from core.types import ActionType, ValueType, TargetType, ConfigType
+from core.types import ActionType, ValueType, TargetType, TreeSearchParams
 import time
 import os
 from wandb.sdk.wandb_run import Run
 import wandb
 
 
-class TreeSearchTrainer(ABC, Generic[ActionType, ValueType, TargetType, ConfigType]):
+class TreeSearchTrainer(ABC, Generic[ActionType, ValueType, TargetType, TreeSearchParams]):
     """Abstract base class for training models used in tree search."""
 
     def __init__(
@@ -27,7 +27,7 @@ class TreeSearchTrainer(ABC, Generic[ActionType, ValueType, TargetType, ConfigTy
         self.replay_buffer_max_size = replay_buffer_max_size
     
     @abstractmethod
-    def create_tree_search(self, state: State[ActionType], num_simulations: int, params: ConfigType) -> TreeSearch:
+    def create_tree_search(self, state: State[ActionType], num_simulations: int, params: TreeSearchParams) -> TreeSearch:
         """Create a tree search instance for the given state.
         
         Args:
@@ -138,7 +138,7 @@ class TreeSearchTrainer(ABC, Generic[ActionType, ValueType, TargetType, ConfigTy
         self,
         *,
         initial_state: Callable[[], State[ActionType]],
-        tree_search_params: ConfigType,
+        tree_search_params: TreeSearchParams,
         optimizer: torch.optim.Optimizer,
         num_iterations: int,
         games_per_iteration: int,
@@ -149,7 +149,7 @@ class TreeSearchTrainer(ABC, Generic[ActionType, ValueType, TargetType, ConfigTy
         checkpoints_folder: Optional[str] = None,
         evaluate_against_agents: Optional[Dict[str, Callable[[State], Agent[ActionType, Any]]]] = None,
         eval_frequency: int = 5,
-        tree_search_eval_params: Optional[ConfigType] = None,
+        tree_search_eval_params: Optional[TreeSearchParams] = None,
         verbose: bool = True,
         wandb_run: Optional[Run] = None,
         model_name: str = "undefined_model",
