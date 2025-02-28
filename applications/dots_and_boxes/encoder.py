@@ -4,7 +4,7 @@ import torch as t
 from game_state import *
 
 
-def simpleEncode(GameState: GameState) -> t.Tensor: 
+def simpleEncode(GameState: DotsAndBoxesGameState) -> t.Tensor: 
     '''
     Input: game state with board of size MAX_SIZE x MAX_SIZE; hence having 2*MAX_SIZE*(MAX_SIZE+1) edges
     Output: pyTorch matrix of size (2*MAX_SIZE)x(MAX_SIZE+1); the first MAX_SIZE rows encode placed VERTICAL edges
@@ -30,7 +30,7 @@ def simpleDecode(x: t.Tensor) -> Tuple[int,int]:
     pass
 
 
-def multiLayerEncode(GameState: GameState) -> t.Tensor:
+def multiLayerEncode(GameState: DotsAndBoxesGameState) -> t.Tensor:
     '''
     Input: game state with board of size MAX_SIZE x MAX_SIZE; hence having 2*MAX_SIZE*(MAX_SIZE+1) edges
     Output: pyTorch tensor of size 3x(2*MAX_SIZE+1)x(2*MAX_SIZE+1); the first layer has +/-1s according to who owns an edge, else zero;

@@ -1,11 +1,9 @@
 import numpy as np
 from typing import List
+from enum import Enum
 from core.tree_search import ActionType, State
 from copy import deepcopy
 
-
-
-# Constants for the game
 EMPTY_EDGE = '.'
 EMPTY_BOX = ' '
 HORIZONTAL = '-'
@@ -16,6 +14,7 @@ PLAYERS = [P1, P2, P_extra]
 PLAYER_SYMBOLS = {P1: 'A', P2: 'B', P_extra: 'X'} #Default P1 vs P2; use P_extra just to pass board states with boxes/edges of 'no ownership'
 SYMBOLS = [EMPTY_EDGE, EMPTY_BOX, HORIZONTAL, VERTICAL, CORNER] + list(PLAYER_SYMBOLS.values())
 MAX_SIZE = 3
+
 
 
 def isValidBoard(arr):
@@ -52,7 +51,7 @@ def new_board(rows, cols):
     return board
 
 
-class GameState:
+class DotsAndBoxesGameState(State):
     def __init__(self, rows=MAX_SIZE, cols=MAX_SIZE, board_state=None, edge_owners = None, player_turn=P1):
         if board_state==None:
             self.board = new_board(rows, cols)
