@@ -1,19 +1,21 @@
 from typing import Tuple, Union, Optional
 from core.implementations.MCTS import MCTS
-from core.implementations.AlphaZero import AlphaZero, AlphaZeroModelAgent
-from core.agent import RandomAgent
+from core.implementations.AlphaZero import AlphaZero, AlphaZeroModelAgent, AlphaZeroConfig
+from core.implementations.RandomAgent import RandomAgent
 from applications.tic_tac_toe.game_state import TicTacToeState
 from applications.tic_tac_toe.mlp_model import TicTacToeModelInterface
 from applications.tic_tac_toe.transformer_model import TicTacToeTransformerInterface
 import torch
+import wandb
 import os
+import argparse
 
 # Type alias for agents we support
 TicTacToeAgent = Union[
     MCTS[Tuple[int, int]],
     AlphaZero[Tuple[int, int]],
     AlphaZeroModelAgent[Tuple[int, int]],
-    RandomAgent[Tuple[int, int]]
+    RandomAgent[Tuple[int, int], float]
 ]
 
 def print_board(state: TicTacToeState) -> None:
@@ -40,7 +42,12 @@ def get_human_action(state: TicTacToeState) -> Tuple[int, int]:
         except ValueError:
             print("Please enter numbers between 0 and 2.")
 
-def create_agent(initial_state: TicTacToeState, agent_type: str) -> Optional[TicTacToeAgent]:
+def create_agent(
+    initial_state: TicTacToeState,
+    agent_type: str,
+    wandb_run_id: Optional[str] = None,
+    wandb_project: str = "AlphaZero-TicTacToe"
+) -> Optional[TicTacToeAgent]:
     """Create an agent of the specified type.
     
     Args:
@@ -53,7 +60,7 @@ def create_agent(initial_state: TicTacToeState, agent_type: str) -> Optional[Tic
     if agent_type == 'human':
         return None
     elif agent_type == 'mcts':
-        return MCTS(initial_state)
+        return MCTS(initial_state, num_simulations=100)
     elif agent_type == 'random':
         return RandomAgent(initial_state)
     else:  # alphazero or model
@@ -67,20 +74,38 @@ def create_agent(initial_state: TicTacToeState, agent_type: str) -> Optional[Tic
         # Setup device and model
         device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
         if model_type == 'mlp':
-            model = TicTacToeModelInterface(device=device)
+            from applications.tic_tac_toe.train import mlp_model_params
+            model = TicTacToeModelInterface(device=device, **mlp_model_params)
         else:  # transformer
-            model = TicTacToeTransformerInterface(device=device)
+            from applications.tic_tac_toe.train import transformer_model_params
+            model = TicTacToeTransformerInterface(device=device, **transformer_model_params)
             
         # Load checkpoint if it exists
-        if os.path.exists(f"applications/tic_tac_toe/checkpoints/{model_type}/best_model.pt"):
-            model.load_checkpoint(f"applications/tic_tac_toe/checkpoints/{model_type}/best_model.pt")
+        try:
+            os.makedirs("applications/tic_tac_toe/downloaded_models", exist_ok=True)
+            model.load_from_wandb_artifact(
+                model_name=f"{model_type}_model",
+                project=wandb_project,
+                root_dir="applications/tic_tac_toe/downloaded_models",
+                run_id=wandb_run_id,
+                model_version="latest"
+            )
+            print(f"Loaded {model_type} model from wandb")
+        except Exception as e:
+            print(f"Error loading {model_type} model from wandb: {e}")
             
         # Create appropriate agent type
         if agent_type == 'alphazero':
             return AlphaZero(
                 initial_state=initial_state,
                 model=model,
-                temperature=0.1
+                num_simulations=100,
+                params=AlphaZeroConfig(
+                    exploration_constant=1.414,
+                    dirichlet_alpha=0.3,
+                    dirichlet_epsilon=0.25,
+                    temperature=0.5
+                )
             )
         else:  # model
             return AlphaZeroModelAgent(initial_state, model)
@@ -112,7 +137,7 @@ def play_game(
             action = get_human_action(state)
         else:
             # Agent's turn
-            action = current_agent(num_simulations)
+            action = current_agent()
             print(f"Player {state.current_player} plays: {action}")
         
         # Apply action and update both agents' trees

@@ -1,31 +1,7 @@
-from typing import Tuple, TypeVar, Optional, Protocol, Generic, List, Dict, Callable
-
-# Define some types
-ActionType = TypeVar('ActionType')  # type of actions at a state in the game
-ValueType = TypeVar('ValueType')    # type of value stored in the node, e.g. policy and expected reward
-EvaluationType = TypeVar('EvaluationType')  # type of output from evaluation
-
-class State(Protocol[ActionType]):
-    def get_legal_actions(self) -> List[ActionType]:
-        """Return list of legal actions at this state."""
-        pass
-
-    def apply_action(self, action: ActionType) -> 'State[ActionType]':
-        """Apply action to state and return new state."""
-        pass
-    
-    def is_terminal(self) -> bool:
-        """Return True if state is terminal (game over)."""
-        pass
-    
-    def get_reward(self, player: int) -> float:
-        """Return reward from player's perspective (for example, -1 for loss, 0 for draw, 1 for win)."""
-        pass
-    
-    @property
-    def current_player(self) -> int:
-        """Return current player (for example, 1 or -1)."""
-        pass
+from typing import Optional, Generic, List, Dict
+from abc import ABC, abstractmethod
+from core.types import ActionType, ValueType, EvaluationType
+from core.state import State
 
 class Node(Generic[ActionType, ValueType]):
     def __init__(
@@ -46,32 +22,38 @@ class Node(Generic[ActionType, ValueType]):
         if actions is None:
             actions = self.state.get_legal_actions()
         for action in actions:
-            new_state = self.state.apply_action(action)
-            child = Node(new_state, parent=self)
-            self.children[action] = child
+            if action not in self.children:
+                new_state = self.state.apply_action(action)
+                child = Node(new_state, parent=self)
+                self.children[action] = child
         
 
-class TreeSearch(Protocol[ActionType, ValueType, EvaluationType]):
+class TreeSearch(ABC, Generic[ActionType, ValueType, EvaluationType]):
     """Protocol for tree search algorithms like MCTS."""
     root: Node[ActionType, ValueType]
+    num_simulations: int
     
+    @abstractmethod
     def select(self, node: Node[ActionType, ValueType]) -> ActionType:
         """Select an action at the given node during tree traversal."""
         pass
     
+    @abstractmethod
     def evaluate(self, node: Node[ActionType, ValueType]) -> EvaluationType:
         """Evaluate a leaf node's state."""
         pass
     
+    @abstractmethod
     def update(self, node: Node[ActionType, ValueType], action: Optional[ActionType], evaluation: EvaluationType) -> None:
         """Update a node's value during backpropagation."""
         pass
     
+    @abstractmethod
     def policy(self, node: Node[ActionType, ValueType]) -> ActionType:
         """Select the best action at a node according to the search results."""
         pass
     
-    def __call__(self, num_simulations: int) -> ActionType:
+    def __call__(self) -> ActionType:
         """Run simulations and return the best action according to the policy.
         This is a concrete implementation that uses the abstract methods above.
         """
@@ -82,7 +64,7 @@ class TreeSearch(Protocol[ActionType, ValueType, EvaluationType]):
             evaluation = self.evaluate(self.root)
             self.update(self.root, None, evaluation)
 
-        for _ in range(num_simulations):
+        for _ in range(self.num_simulations):
             node = self.root
             path = []  # List of (node, action) pairs for backpropagation
 
@@ -110,7 +92,5 @@ class TreeSearch(Protocol[ActionType, ValueType, EvaluationType]):
     def update_root(self, actions: List[ActionType]) -> None:
         """Update the root node after committing to actions."""
         for action in actions:
-            if action in self.root.children:
-                self.root = self.root.children[action]
-            else:
-                self.root = Node(self.root.state.apply_action(action))
+            self.root.expand([action]) # May have to change this or handle unexpanded node if we want to reanalyze
+            self.root = self.root.children[action]

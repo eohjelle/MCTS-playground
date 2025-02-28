@@ -16,7 +16,7 @@ class MCTSValue:
         return self.total_value / max(1, self.visit_count)
 
 class MCTS(TreeSearch[ActionType, MCTSValue, Tuple[MCTSValue, float]], Generic[ActionType]):
-    def __init__(self, initial_state: State[ActionType], exploration_constant: float = 1.414):
+    def __init__(self, initial_state: State[ActionType], num_simulations: int, exploration_constant: float = 1.414):
         self.root = Node(
             initial_state,
             value=MCTSValue(
@@ -26,6 +26,7 @@ class MCTS(TreeSearch[ActionType, MCTSValue, Tuple[MCTSValue, float]], Generic[A
             )
         )
         self._exploration_constant = exploration_constant
+        self.num_simulations = num_simulations
     
     def select(self, node: Node[ActionType, MCTSValue]) -> ActionType:
         """Select an action using UCT."""

@@ -1,5 +1,5 @@
 from typing import List, Tuple, Optional
-from core.tree_search import State
+from core.state import State
 
 class TicTacToeState(State[Tuple[int, int]]):
     def __init__(self, board: Optional[List[List[str]]] = None, current_player: int = 1):

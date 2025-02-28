@@ -13,7 +13,7 @@
             }
         },
         {
-            "name": "Python: Tic Tac Toe Train",
+            "name": "Python: Tic Tac Toe Train MLP",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/applications/tic_tac_toe/train.py",
@@ -22,6 +22,18 @@
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             }
+        },
+        {
+            "name": "Python: Tic Tac Toe Train Transformer",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/applications/tic_tac_toe/train.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": ["--model", "transformer"]
         }
     ]
 } 
