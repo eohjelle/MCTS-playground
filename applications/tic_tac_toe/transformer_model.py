@@ -17,6 +17,7 @@ class TicTacToeTransformer(nn.Module):
             embed_dim: int,
             num_heads: int,
             feedforward_dim: int,
+            output_head_dim: int,
             dropout: float,
             norm_first: bool = True,
             activation: str = 'relu'
@@ -51,24 +52,32 @@ class TicTacToeTransformer(nn.Module):
         ])
 
         # Final layer norm
-        self.final_norm = nn.LayerNorm(embed_dim)
+        self.norm = nn.LayerNorm(embed_dim)
 
         # Final activation function
         match activation:
             case 'relu':
-                self.final_activation = nn.ReLU()
+                self.activation = nn.ReLU()
             case 'gelu':
-                self.final_activation = nn.GELU()
+                self.activation = nn.GELU()
             case _:
                 raise ValueError(f"Invalid activation function: {activation}")
 
-        # Policy head: maps each position's embedding to a single logit
-        self.policy_contraction = nn.Parameter(torch.randn(9, embed_dim, 9))
-        self.policy_bias = nn.Parameter(torch.randn(1, 9))
-
-        # Value head: linear layer to map board position and embedding dimensions to a single value estimate
-        self.value_contraction = nn.Parameter(torch.randn(9, embed_dim, 1))
-        self.value_bias = nn.Parameter(torch.randn(1, 1))
+        # Policy head using multi-head attention with learned queries
+        self.output_queries = nn.Embedding(10, output_head_dim) # 9 actions + 1 value
+        self.output_attention = nn.MultiheadAttention(
+            embed_dim=output_head_dim,
+            kdim=embed_dim,
+            vdim=embed_dim,
+            num_heads=num_heads,
+            dropout=dropout,
+            batch_first=True
+        )
+        self.output_mlp = nn.Sequential(
+            nn.Linear(output_head_dim, 4*output_head_dim),
+            self.activation,
+            nn.Linear(4*output_head_dim, 1)
+        )
 
     def forward(self, x):
         """
@@ -91,15 +100,22 @@ class TicTacToeTransformer(nn.Module):
             x = transformer(x)       # (batch_size, 9, embed_dim)
         
         # Apply final layer norm
-        x = self.final_norm(x)
-        x = self.final_activation(x)
+        x = self.norm(x)
+        x = self.activation(x)
         
         # Policy head outputs one logit per position
-        policy = torch.einsum('b s e, s e p -> b p', x, self.policy_contraction) + self.policy_bias
-        
-        # Value head outputs a single value
-        value = torch.einsum('b s e, s e v -> b v', x, self.value_contraction) + self.value_bias # (batch_size, 1)
-        value = torch.tanh(value)  # (batch_size, 1)
+        output_queries = self.output_queries(torch.arange(10, device=x.device).unsqueeze(0))  # (1, 10, output_head_dim)
+        output_queries = output_queries.expand(x.shape[0], -1, -1)  # (batch_size, 10, output_head_dim)
+        output_attn_output, _ = self.output_attention(
+            query=output_queries,
+            key=x,
+            value=x
+        ) # (batch_size, 10, output_head_dim)
+        output = self.output_mlp(output_attn_output).squeeze(-1) # (batch_size, 10)
+
+        policy = output[:, :9] # (batch_size, 9)
+        value = output[:, 9] # (batch_size)
+        value = torch.tanh(value)  # (batch_size)
         
         return {
             "policy": policy,
@@ -115,6 +131,7 @@ class TicTacToeTransformerInterface(TicTacToeBaseModelInterface):
         embed_dim: int = 9,
         num_heads: int = 3,
         feedforward_dim: int = 27,
+        output_head_dim: int = 16,
         dropout: float = 0.1,
         norm_first: bool = True,
         activation: str = 'relu'
@@ -124,6 +141,7 @@ class TicTacToeTransformerInterface(TicTacToeBaseModelInterface):
             embed_dim=embed_dim,
             num_heads=num_heads,
             feedforward_dim=feedforward_dim,
+            output_head_dim=output_head_dim,
             dropout=dropout,
             norm_first=norm_first,
             activation=activation
@@ -131,10 +149,10 @@ class TicTacToeTransformerInterface(TicTacToeBaseModelInterface):
         self.model.to(device)
         self.model.eval()  # Set to evaluation mode
     
-    def encode_state(self, state: TicTacToeState) -> torch.Tensor:
+    @staticmethod
+    def encode_state(state: TicTacToeState, device: torch.device) -> torch.Tensor:
         """Convert board state to neural network input tensor."""
         # Create tensor of board state indices (0=empty, 1=X, 2=O)
-        device = next(self.model.parameters()).device
         board_tensor = torch.zeros(9, device=device, dtype=torch.int64)
         
         for i in range(3):

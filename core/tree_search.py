@@ -1,5 +1,5 @@
-from typing import Optional, Generic, List, Dict
-from abc import ABC, abstractmethod
+from typing import Optional, Generic, List, Dict, Protocol
+from abc import abstractmethod
 from core.types import ActionType, ValueType, EvaluationType
 from core.state import State
 
@@ -28,7 +28,7 @@ class Node(Generic[ActionType, ValueType]):
                 self.children[action] = child
         
 
-class TreeSearch(ABC, Generic[ActionType, ValueType, EvaluationType]):
+class TreeSearch(Protocol[ActionType, ValueType, EvaluationType]):
     """Protocol for tree search algorithms like MCTS."""
     root: Node[ActionType, ValueType]
     num_simulations: int
@@ -36,22 +36,22 @@ class TreeSearch(ABC, Generic[ActionType, ValueType, EvaluationType]):
     @abstractmethod
     def select(self, node: Node[ActionType, ValueType]) -> ActionType:
         """Select an action at the given node during tree traversal."""
-        pass
+        ...
     
     @abstractmethod
     def evaluate(self, node: Node[ActionType, ValueType]) -> EvaluationType:
         """Evaluate a leaf node's state."""
-        pass
+        ...
     
     @abstractmethod
     def update(self, node: Node[ActionType, ValueType], action: Optional[ActionType], evaluation: EvaluationType) -> None:
         """Update a node's value during backpropagation."""
-        pass
+        ...
     
     @abstractmethod
     def policy(self, node: Node[ActionType, ValueType]) -> ActionType:
         """Select the best action at a node according to the search results."""
-        pass
+        ...
     
     def __call__(self) -> ActionType:
         """Run simulations and return the best action according to the policy.

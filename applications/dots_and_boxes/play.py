@@ -1,7 +1,7 @@
 from typing import Tuple, Union, Optional
 from core.implementations.MCTS import MCTS
-from core.implementations.AlphaZero import AlphaZero, AlphaZeroModelAgent
-from core.agent import RandomAgent
+from core.implementations.AlphaZero import AlphaZero, AlphaZeroModelAgent, AlphaZeroValue, AlphaZeroConfig
+from core.implementations.RandomAgent import RandomAgent
 from applications.dots_and_boxes.game_state import *
 from applications.dots_and_boxes.NNmodels.SimpleMLP import DotsAndBoxesMLPInterface
 from applications.dots_and_boxes.NNmodels.transformer import DotsAndBoxesTransformerInterface
@@ -53,7 +53,7 @@ def create_agent(initial_state: DotsAndBoxesGameState, agent_type: str) -> Optio
     if agent_type == 'human':
         return None
     elif agent_type == 'mcts':
-        return MCTS(initial_state)
+        return MCTS(initial_state, num_simulations=100)
     elif agent_type == 'random':
         return RandomAgent(initial_state)
     else:  # alphazero or model
@@ -79,8 +79,14 @@ def create_agent(initial_state: DotsAndBoxesGameState, agent_type: str) -> Optio
         if agent_type == 'alphazero':
             return AlphaZero(
                 initial_state=initial_state,
+                num_simulations=100,
                 model=model,
-                temperature=0.1
+                params=AlphaZeroConfig(
+                    exploration_constant=1.0,
+                    dirichlet_alpha=0.3,
+                    dirichlet_epsilon=0.25,
+                    temperature=1.0
+                )
             )
         else:  # model
             return AlphaZeroModelAgent(initial_state, model)
@@ -113,7 +119,7 @@ def play_game(
             action = get_human_action(state)
         else:
             # Agent's turn
-            action = current_agent(num_simulations)
+            action = current_agent()
             print(f"Player {state.current_player} plays: {action}")
         
         # Apply action and update both agents' trees

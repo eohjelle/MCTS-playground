@@ -1,5 +1,6 @@
-from typing import Protocol, Dict, runtime_checkable, Optional
+from typing import Protocol, Dict, runtime_checkable, Optional, Tuple, Any
 import torch
+from core.data_structures import TrainingExample
 from core.tree_search import State
 from core.types import ActionType, TargetType
 import os
@@ -16,18 +17,18 @@ class ModelInterface(Protocol[ActionType, TargetType]):
     single (not batched) states/targets. The batched model input is a stacked tensor of 
     encoded states, and the batched model output is a dictionary of stacked tensors.
 
-    The model attribute gives direct access to the underlying PyTorch model for:
-    - forward() - model inference (must return a dict of tensors)
-    - train()/eval() - setting training mode
-    - parameters() - optimization
+    The model attribute gives direct access to the underlying PyTorch model for forward(),
+    parameters(), etc.
     """
     model: torch.nn.Module
 
-    def encode_state(self, state: State[ActionType]) -> torch.Tensor:
+    @staticmethod
+    def encode_state(state: State[ActionType], device: torch.device) -> torch.Tensor:
         """Convert a single state to model input tensor."""
         ...
 
-    def decode_output(self, output: Dict[str, torch.Tensor], state: State) -> TargetType:
+    @staticmethod
+    def decode_output(output: Dict[str, torch.Tensor], state: State) -> TargetType:
         """Convert raw model outputs to game-specific target format.
         
         This is used during inference to convert model outputs (dictionary of tensors)
@@ -35,24 +36,28 @@ class ModelInterface(Protocol[ActionType, TargetType]):
         """
         ...
     
-    def encode_target(self, target: TargetType) -> Dict[str, torch.Tensor]:
-        """Convert a target into tensor format for loss computation.
+    @staticmethod
+    def encode_example(example: TrainingExample[ActionType, TargetType], device: torch.device) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
+        """Convert a training example into tensor targets and auxiliary data for loss computation.
         
         This converts game-specific targets (e.g. dictionaries of action probabilities)
         into a dictionary of tensors that can be compared with model outputs.
+
+        Returns a tuple of (targets, data), where targets is a dictionary of tensors and data is a dictionary of auxiliary tensors (e.g. masks for legal actions).
         """
         ...
     
     def predict(self, state: State[ActionType]) -> TargetType:
         """Convenience method for single-state inference."""
         # We add the batch dimension before model inference and remove it after.
-        encoded_state = self.encode_state(state).unsqueeze(0)
+        device = next(self.model.parameters()).device
+        encoded_state = self.encode_state(state, device).unsqueeze(0)
         outputs = self.model(encoded_state)
         outputs = {k: v.squeeze(0) for k, v in outputs.items()}
         return self.decode_output(outputs, state)
     
     def save_checkpoint(self, path: str) -> None:
-        """Save model checkpoint in a device-agnostic way."""
+        """Save model checkpoint."""
         torch.save({
             'model_state_dict': self.model.state_dict(),
             'model_config': getattr(self.model, 'config', None)  # Save model config if available

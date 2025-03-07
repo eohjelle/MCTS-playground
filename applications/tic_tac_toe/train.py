@@ -62,6 +62,24 @@ def train(
     if use_wandb and wandb_run:
         wandb_run.finish(exit_code=0)
 
+
+# Model-specific parameters passed to the model constructor
+# These are also used for loading models from wandb artifacts in play.py
+
+mlp_model_params = {
+    'hidden_size': 64
+}
+
+transformer_model_params = {
+    'attention_layers': 2,
+    'embed_dim': 16,
+    'num_heads': 4,
+    'feedforward_dim': 64,
+    'dropout': 0.0,
+    'norm_first': True,
+    'activation': 'relu'
+}
+
 if __name__ == "__main__":
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Train a Tic-Tac-Toe model')
@@ -81,20 +99,10 @@ if __name__ == "__main__":
 
     # Model-specific parameters
     if args.model == 'mlp':
-        model_params = model_params = {
-            'hidden_size': 64
-        }
+        model_params = mlp_model_params
         model = TicTacToeModelInterface(device=device, **model_params)
     elif args.model == 'transformer':
-        model_params = {
-            'attention_layers': 2,
-            'embed_dim': 16,
-            'num_heads': 4,
-            'feedforward_dim': 64,
-            'dropout': 0.0,
-            'norm_first': True,
-            'activation': 'relu'
-        }
+        model_params = transformer_model_params
         model = TicTacToeTransformerInterface(device=device, **model_params)
     else:
         raise ValueError(f"Invalid model type: {args.model}")
@@ -133,7 +141,7 @@ if __name__ == "__main__":
     # Training parameters
     training_params = {
         'num_iterations': 1,
-        'games_per_iteration': 10,
+        'games_per_iteration': 1,
         'batch_size': 256,
         'steps_per_iteration': 100,
         'num_simulations': 100,

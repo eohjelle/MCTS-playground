@@ -1,15 +1,16 @@
 import torch
 import torch.nn.functional as F
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Any
 from core.model_interface import ModelInterface
 from core.implementations.AlphaZero import AlphaZeroTarget
 from applications.tic_tac_toe.game_state import TicTacToeState
-
+from core.data_structures import TrainingExample
 
 class TicTacToeBaseModelInterface(ModelInterface[Tuple[int, int], AlphaZeroTarget]):
     """Base class for Tic-Tac-Toe model interfaces containing common functionality."""
     
-    def decode_output(self, output: Dict[str, torch.Tensor], state: TicTacToeState) -> AlphaZeroTarget:
+    @staticmethod
+    def decode_output(output: Dict[str, torch.Tensor], state: TicTacToeState) -> AlphaZeroTarget:
         """Convert raw model output to policy dictionary and value."""
         policy_logits = output["policy"]
         value = output["value"]
@@ -39,26 +40,35 @@ class TicTacToeBaseModelInterface(ModelInterface[Tuple[int, int], AlphaZeroTarge
             policy_dict[(row, col)] = prob
         
         return policy_dict, float(value.item())  # Convert value to float
-    
-    def encode_target(self, target: AlphaZeroTarget) -> Dict[str, torch.Tensor]:
+        
+    @staticmethod
+    def encode_example(example: TrainingExample[Tuple[int, int], AlphaZeroTarget], device: torch.device) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
         """Convert a target into tensor format for loss computation.
         
         Args:
-            target: Tuple of (policy_dict, value) where policy_dict maps actions to probabilities
+            target: Tuple of (policy_dict, value, legal_actions) where policy_dict maps actions to probabilities
         
         Returns:
             Dictionary with policy tensor (9 logits) and value tensor
         """
-        policy_dict, value = target
-        device = next(self.model.parameters()).device
+        policy_dict, value = example.target
         
-        # Convert policy dict to tensor
+        # Convert policy dict and legal actions to tensor
         policy = torch.zeros(9, device=device)
         for (row, col), prob in policy_dict.items():
             idx = row * 3 + col
             policy[idx] = prob
-        
+
+        # Convert legal actions to a tensor mask
+        legal_actions_list = example.data["legal_actions"]
+        legal_actions = torch.zeros(9, device=device)
+        for action in legal_actions_list:
+            idx = action[0] * 3 + action[1]
+            legal_actions[idx] = 1
+
         return {
             "policy": policy,
             "value": torch.tensor([value], device=device)
+        }, {
+            "legal_actions": legal_actions
         }
