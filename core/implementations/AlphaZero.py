@@ -193,7 +193,9 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTa
         model: ModelInterface[ActionType, AlphaZeroTarget],
         replay_buffer: Optional[ReplayBuffer] = None,
         replay_buffer_max_size: int = 100000,
-        value_softness: float = 0.0
+        value_softness: float = 0.0,
+        mask_illegal_moves: bool = True,
+        mask_value: float = -20.0
     ):
         """Initialize AlphaZero trainer.
         
@@ -202,13 +204,12 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTa
             replay_buffer: Optional existing replay buffer to start with
             replay_buffer_max_size: Maximum number of examples in replay buffer
         """
-        super().__init__(
-            model=model,
-            replay_buffer=replay_buffer,
-            replay_buffer_max_size=replay_buffer_max_size
-        )
+        self.model = model 
+        self.replay_buffer = replay_buffer or ReplayBuffer(max_size = replay_buffer_max_size)
         self.value_softness = value_softness
-    
+        self.mask_illegal_moves = mask_illegal_moves
+        self.mask_value = mask_value
+
     def create_tree_search(self, state: State[ActionType], num_simulations: int, params: AlphaZeroConfig) -> TreeSearch:
         """Create an AlphaZero instance for the given state.
         
@@ -252,10 +253,11 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTa
             outcome_value = float(game_outcome if is_same_player else -game_outcome)
             assert node.value is not None, "Node value is None"
             value = outcome_value * (1 - self.value_softness) + self.value_softness * node.value.mean_value
-            
+
             examples.append(TrainingExample(
                 state=node.state,
-                target=(policy, value)
+                target=(policy, value),
+                data={"legal_actions": node.children.keys()}
             ))
         
         return examples
@@ -263,7 +265,8 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTa
     def compute_loss(
         self,
         predictions: Dict[str, torch.Tensor],
-        targets: Dict[str, torch.Tensor]
+        targets: Dict[str, torch.Tensor],
+        data: Dict[str, torch.Tensor]
     ) -> Tuple[torch.Tensor, Dict[str, float]]:
         """Compute AlphaZero loss for a batch.
         
@@ -274,14 +277,24 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTa
             targets: Encoded targets for the batch:
                 - "policy": Target policy probabilities [batch_size, num_actions]
                 - "value": Target values [batch_size, 1]
-        
+            data: Auxiliary data for the batch:
+                - "legal_actions": Legal actions [batch_size, num_actions]
+
         Returns:
             Tuple of:
             - Total loss combining policy and value losses
             - Dictionary of metrics (policy_loss and value_loss)
         """
+
+        # Mask illegal actions
+        if self.mask_illegal_moves:
+            legal_actions = data["legal_actions"]
+            pred_policy = predictions["policy"] * legal_actions + (1 - legal_actions) * self.mask_value
+        else:
+            pred_policy = predictions["policy"]
+
         # Policy loss (cross entropy over actions)
-        policy_loss = F.cross_entropy(predictions["policy"], targets["policy"])
+        policy_loss = F.cross_entropy(pred_policy, targets["policy"])
         
         # Value loss (MSE)
         value_loss = F.mse_loss(predictions["value"], targets["value"])
@@ -298,10 +311,15 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTa
         return total_loss, metrics
     
 
-class AlphaZeroModelAgent(Agent[ActionType, AlphaZeroValue]):
+class AlphaZeroModelAgent(Agent[ActionType]):
     """Agent that uses a model (no tree search) to select actions."""
-    def __init__(self, initial_state: State[ActionType], model: ModelInterface[ActionType, AlphaZeroTarget]):
-        self.root = Node(
+    def __init__(
+            self, 
+            initial_state: State[ActionType], 
+            model: ModelInterface[ActionType, AlphaZeroTarget],
+            temperature: float = 0.0
+        ):
+        self.root = Node[ActionType, AlphaZeroValue](
             state=initial_state,
             value=AlphaZeroValue(
                 visit_count=0,
@@ -311,8 +329,32 @@ class AlphaZeroModelAgent(Agent[ActionType, AlphaZeroValue]):
             )
         )
         self.model = model
+        self.temperature = temperature
 
     def __call__(self) -> ActionType:
         policy, _ = self.model.predict(self.root.state)  # Access the state inside the node
         keys, probs = zip(*policy.items())
-        return random.choices(keys, weights=probs, k=1)[0]
+        
+        # Handle temperature=0 case: choose uniformly among max probability actions
+        if self.temperature == 0.0:
+            # Find actions with maximum probability
+            max_prob = 0
+            max_indices = []
+            for i, p in enumerate(probs):
+                if p > max_prob:
+                    max_prob = p
+                    max_indices = [i]
+                elif p == max_prob:
+                    max_indices.append(i)
+            
+            # Choose randomly among the max probability actions
+            selected_index = random.choice(max_indices)
+            return keys[selected_index]
+        else:
+            # For all other temperatures, apply temperature scaling
+            adjusted_probs = [p ** (1.0 / self.temperature) for p in probs]
+            # Renormalize
+            total = sum(adjusted_probs)
+            if total > 0:
+                adjusted_probs = [p / total for p in adjusted_probs]
+            return random.choices(keys, weights=adjusted_probs, k=1)[0]

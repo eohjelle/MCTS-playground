@@ -6,3 +6,6 @@ __pycache__
 **/wandb/
 **/artifacts/
 **/downloaded_models/
+
+# Pickle files
+**/*.pkl

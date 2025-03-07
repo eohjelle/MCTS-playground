@@ -1,5 +1,5 @@
-from typing import List, Dict, Optional, Tuple, Callable, Any, Generic
-from abc import ABC, abstractmethod
+from typing import List, Dict, Optional, Tuple, Callable, Any, Protocol
+from abc import abstractmethod
 import torch
 from core.tree_search import State, Node, TreeSearch
 from core.benchmark import Agent, benchmark
@@ -12,19 +12,10 @@ from wandb.sdk.wandb_run import Run
 import wandb
 
 
-class TreeSearchTrainer(ABC, Generic[ActionType, ValueType, TargetType, TreeSearchParams]):
+class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType, TreeSearchParams]):
     """Abstract base class for training models used in tree search."""
-
-    def __init__(
-        self,
-        *,
-        model: ModelInterface[ActionType, TargetType],
-        replay_buffer: Optional[ReplayBuffer] = None,
-        replay_buffer_max_size: int = 100000
-    ):
-        self.model = model
-        self.replay_buffer = replay_buffer
-        self.replay_buffer_max_size = replay_buffer_max_size
+    model: ModelInterface[ActionType, TargetType]
+    replay_buffer: ReplayBuffer
     
     @abstractmethod
     def create_tree_search(self, state: State[ActionType], num_simulations: int, params: TreeSearchParams) -> TreeSearch:
@@ -35,7 +26,7 @@ class TreeSearchTrainer(ABC, Generic[ActionType, ValueType, TargetType, TreeSear
             num_simulations: Number of simulations to run
             params: Hyperparameters for the tree search, e. g. exploration constant, temperature, etc.
         """
-        pass
+        ...
     
     @abstractmethod
     def extract_examples(self, game: List[Tuple[Node[ActionType, ValueType], ActionType]]) -> List[TrainingExample[ActionType, TargetType]]:
@@ -47,26 +38,28 @@ class TreeSearchTrainer(ABC, Generic[ActionType, ValueType, TargetType, TreeSear
         Returns:
             List of training examples
         """
-        pass
+        ...
     
     @abstractmethod
     def compute_loss(
         self,
         predictions: Dict[str, torch.Tensor],
-        targets: Dict[str, torch.Tensor]
+        targets: Dict[str, torch.Tensor],
+        data: Dict[str, torch.Tensor]
     ) -> Tuple[torch.Tensor, Optional[Dict[str, float]]]:
         """Compute loss between predictions and targets.
         
         Args:
             predictions: Raw model outputs for a batch
             targets: Encoded targets for the same batch
-        
+            data: Auxiliary data for the same batch, e. g. masks for legal actions
+
         Returns:
             Tuple of:
             - Primary loss tensor to be optimized
             - Optional dictionary of additional metrics to track
         """
-        pass
+        ...
     
     def self_play_game(
         self,
@@ -106,33 +99,12 @@ class TreeSearchTrainer(ABC, Generic[ActionType, ValueType, TargetType, TreeSear
     
     def extend_replay_buffer(self, examples: List[TrainingExample[ActionType, TargetType]]):
         """Extend the replay buffer with new examples."""
-        states = torch.stack([
-            self.model.encode_state(ex.state) for ex in examples
-        ])
-        encoded_targets = [self.model.encode_target(ex.target) for ex in examples]
-        targets = {
-            key: torch.stack([
-                encoded_targets[i][key] for i in range(len(encoded_targets))
-            ])
-            for key in encoded_targets[0].keys()
-        }
-
-        # Initialize buffer if it doesn't exist, otherwise extend it
-        if self.replay_buffer is None:
-            self.replay_buffer = ReplayBuffer(
-                states=states,
-                targets=targets
-            )
-        else:
-            self.replay_buffer.states = torch.cat([self.replay_buffer.states, states])
-            for key in self.replay_buffer.targets.keys():
-                self.replay_buffer.targets[key] = torch.cat([self.replay_buffer.targets[key], targets[key]])
-        
-        # Trim to max size if needed
-        if self.replay_buffer.states.shape[0] > self.replay_buffer_max_size:
-            self.replay_buffer.states = self.replay_buffer.states[-self.replay_buffer_max_size:]
-            for key in self.replay_buffer.targets.keys():
-                self.replay_buffer.targets[key] = self.replay_buffer.targets[key][-self.replay_buffer_max_size:]
+        device = next(self.model.model.parameters()).device
+        self.replay_buffer.extend(
+            examples, 
+            lambda state: self.model.encode_state(state, device), 
+            lambda example: self.model.encode_example(example, device)
+        )
 
     def train(
         self,
@@ -147,7 +119,7 @@ class TreeSearchTrainer(ABC, Generic[ActionType, ValueType, TargetType, TreeSear
         num_simulations: int,
         checkpoint_frequency: int,
         checkpoints_folder: Optional[str] = None,
-        evaluate_against_agents: Optional[Dict[str, Callable[[State], Agent[ActionType, Any]]]] = None,
+        evaluate_against_agents: Optional[Dict[str, Callable[[State], Agent[ActionType]]]] = None,
         eval_frequency: int = 5,
         tree_search_eval_params: Optional[TreeSearchParams] = None,
         verbose: bool = True,
@@ -180,7 +152,7 @@ class TreeSearchTrainer(ABC, Generic[ActionType, ValueType, TargetType, TreeSear
         
         """
         start_time = time.time()
-        best_win_rate = 0.0
+        best_score = 0.0
         
         # Create checkpoints directory if specified
         if checkpoints_folder:
@@ -220,7 +192,7 @@ class TreeSearchTrainer(ABC, Generic[ActionType, ValueType, TargetType, TreeSear
                 continue
             
             self.extend_replay_buffer(new_examples)
-            assert self.replay_buffer is not None, "Replay buffer is not initialized after self-play phase." # Makes type checking easier
+            assert self.replay_buffer.states is not None and self.replay_buffer.targets is not None and self.replay_buffer.data is not None, "Replay buffer is not initialized after self-play phase." # Makes type checking easier
             
             # Train on replay buffer
             metrics_avg = self.train_iteration(
@@ -255,10 +227,11 @@ class TreeSearchTrainer(ABC, Generic[ActionType, ValueType, TargetType, TreeSear
                 if verbose:
                     print("\nEvaluation results:")
                     for opponent, stats in eval_stats.items():
-                        print(f"{opponent}: Win rate = {stats['win_rate']:.2%}, Draw rate = {stats['draw_rate']:.2%}")
+                        print(f"{opponent}: Win rate = {stats['win_rate']:.2%}, Draw rate = {stats['draw_rate']:.2%}, Loss rate = {stats['loss_rate']:.2%}")
 
-                if sum(stats['win_rate'] for stats in eval_stats.values()) > best_win_rate:
-                    best_win_rate = sum(stats['win_rate'] for stats in eval_stats.values())
+                # Update best score
+                if sum(stats['win_rate'] - stats['loss_rate'] for stats in eval_stats.values()) > best_score:
+                    best_score = sum(stats['win_rate'] - stats['loss_rate'] for stats in eval_stats.values())
                     if wandb_run:
                         # Save best model as artifact
                         model_artifact = wandb.Artifact(
@@ -269,6 +242,8 @@ class TreeSearchTrainer(ABC, Generic[ActionType, ValueType, TargetType, TreeSear
                         self.model.save_checkpoint(best_model_path)
                         model_artifact.add_file(best_model_path)
                         wandb_run.log_artifact(model_artifact)
+                    if verbose:
+                        print(f"New best score: {best_score:.2%}")
                 
             # 4. Checkpointing
             if wandb_run and (iteration + 1) % checkpoint_frequency == 0:
@@ -305,7 +280,7 @@ class TreeSearchTrainer(ABC, Generic[ActionType, ValueType, TargetType, TreeSear
             print(f"\nTraining complete! Total time: {total_time/3600:.1f}h")
         if wandb_run:
             wandb_run.summary['total_time_hours'] = total_time/3600
-            wandb_run.summary['best_win_rate'] = best_win_rate
+            wandb_run.summary['best_score'] = best_score
 
             # Save the final model
             model_artifact = wandb.Artifact(
@@ -345,7 +320,7 @@ class TreeSearchTrainer(ABC, Generic[ActionType, ValueType, TargetType, TreeSear
         Returns:
             Dictionary of averaged metrics
         """
-        assert self.replay_buffer is not None, "Called train_iteration without initializing replay buffer."
+        assert self.replay_buffer.states is not None, "Called train_iteration without initializing replay buffer."
         buffer_size = self.replay_buffer.states.shape[0]
         metrics_sum: Dict[str, float] = {}
         
@@ -386,7 +361,7 @@ class TreeSearchTrainer(ABC, Generic[ActionType, ValueType, TargetType, TreeSear
         Returns:
             Dict of loss metrics
         """
-        assert self.replay_buffer is not None, "Called train_batch without initializing replay buffer."
+        assert self.replay_buffer.states is not None and self.replay_buffer.targets is not None and self.replay_buffer.data is not None, "Called train_batch without initializing replay buffer."
         
         self.model.model.train()
         
@@ -396,12 +371,16 @@ class TreeSearchTrainer(ABC, Generic[ActionType, ValueType, TargetType, TreeSear
             key: self.replay_buffer.targets[key][batch_indices]
             for key in self.replay_buffer.targets.keys()
         }
+        data = {
+            key: self.replay_buffer.data[key][batch_indices]
+            for key in self.replay_buffer.data.keys()
+        }
         
         # Get model outputs
         model_outputs = self.model.model(states)
         
         # Compute loss and metrics
-        loss, metrics = self.compute_loss(model_outputs, targets)
+        loss, metrics = self.compute_loss(model_outputs, targets, data)
         
         # Optimize
         optimizer.zero_grad()

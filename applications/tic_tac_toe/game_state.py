@@ -90,4 +90,36 @@ class TicTacToeState(State[Tuple[int, int]]):
             rows.append(' | '.join(row))
             if i < 2:
                 rows.append('-' * 9)
-        return '\n'.join(rows) 
+        return '\n'.join(rows)
+    
+    def __eq__(self, other) -> bool:
+        """Check if two TicTacToeState instances are equal.
+        
+        Two states are equal if they have the same board configuration
+        and the same current player.
+        
+        Args:
+            other: Another TicTacToeState instance to compare with
+            
+        Returns:
+            True if the states are equal, False otherwise
+        """
+        if not isinstance(other, TicTacToeState):
+            return False
+        return self.board == other.board and self._current_player == other._current_player
+        
+    def __hash__(self) -> int:
+        """Generate a hash value for the TicTacToeState.
+        
+        The hash is based on the board configuration and current player,
+        allowing TicTacToeState objects to be used as dictionary keys
+        or in sets.
+        
+        Returns:
+            An integer hash value
+        """
+        # Convert board to a tuple of tuples (immutable) for hashing
+        board_tuple = tuple(tuple(row) for row in self.board)
+        
+        # Combine with current player for the hash
+        return hash((board_tuple, self._current_player)) 

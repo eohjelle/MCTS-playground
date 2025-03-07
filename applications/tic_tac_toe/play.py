@@ -1,7 +1,9 @@
 from typing import Tuple, Union, Optional
+from core.agent import Agent
 from core.implementations.MCTS import MCTS
 from core.implementations.AlphaZero import AlphaZero, AlphaZeroModelAgent, AlphaZeroConfig
 from core.implementations.RandomAgent import RandomAgent
+from core.implementations.Minimax import Minimax
 from applications.tic_tac_toe.game_state import TicTacToeState
 from applications.tic_tac_toe.mlp_model import TicTacToeModelInterface
 from applications.tic_tac_toe.transformer_model import TicTacToeTransformerInterface
@@ -9,14 +11,6 @@ import torch
 import wandb
 import os
 import argparse
-
-# Type alias for agents we support
-TicTacToeAgent = Union[
-    MCTS[Tuple[int, int]],
-    AlphaZero[Tuple[int, int]],
-    AlphaZeroModelAgent[Tuple[int, int]],
-    RandomAgent[Tuple[int, int], float]
-]
 
 def print_board(state: TicTacToeState) -> None:
     """Print the current board state."""
@@ -47,12 +41,12 @@ def create_agent(
     agent_type: str,
     wandb_run_id: Optional[str] = None,
     wandb_project: str = "AlphaZero-TicTacToe"
-) -> Optional[TicTacToeAgent]:
+) -> Optional[Agent]:
     """Create an agent of the specified type.
     
     Args:
         initial_state: The initial game state
-        agent_type: One of 'human', 'mcts', 'alphazero', 'model', or 'random'
+        agent_type: One of 'human', 'mcts', 'alphazero', 'model', 'random', or 'minimax'
     
     Returns:
         The created agent, or None if agent_type is 'human'
@@ -63,6 +57,8 @@ def create_agent(
         return MCTS(initial_state, num_simulations=100)
     elif agent_type == 'random':
         return RandomAgent(initial_state)
+    elif agent_type == 'minimax':
+        return Minimax(initial_state)
     else:  # alphazero or model
         # Get model type
         while True:
@@ -111,8 +107,8 @@ def create_agent(
             return AlphaZeroModelAgent(initial_state, model)
 
 def play_game(
-    x_agent: Optional[TicTacToeAgent],
-    o_agent: Optional[TicTacToeAgent],
+    x_agent: Optional[Agent],
+    o_agent: Optional[Agent],
     num_simulations: int = 100
 ) -> None:
     """Play a game of Tic-Tac-Toe between two players.
@@ -159,18 +155,18 @@ def play_game(
 
 def main():
     # Get player types
-    valid_types = ['human', 'mcts', 'alphazero', 'model', 'random']
+    valid_types = ['human', 'mcts', 'alphazero', 'model', 'random', 'minimax']
     
     # Get X player type
     while True:
-        x_type = input("Choose X player type (human/mcts/alphazero/model/random): ").lower()
+        x_type = input("Choose X player type (human/mcts/alphazero/model/random/minimax): ").lower()
         if x_type in valid_types:
             break
         print(f"Please enter one of: {', '.join(valid_types)}")
     
     # Get O player type
     while True:
-        o_type = input("Choose O player type (human/mcts/alphazero/model/random): ").lower()
+        o_type = input("Choose O player type (human/mcts/alphazero/model/random/minimax): ").lower()
         if o_type in valid_types:
             break
         print(f"Please enter one of: {', '.join(valid_types)}")

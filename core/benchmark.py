@@ -4,8 +4,8 @@ from core.types import ActionType, ValueType
 from core.agent import Agent
 
 def benchmark(
-    create_agent: Callable[[State], Agent[ActionType, ValueType]],
-    create_opponents: Dict[str, Callable[[State], Agent[ActionType, ValueType]]],
+    create_agent: Callable[[State], Agent[ActionType]],
+    create_opponents: Dict[str, Callable[[State], Agent[ActionType]]],
     initial_state: Callable[[], State[ActionType]],
     num_games: int = 20,
 ) -> Dict[str, Dict[str, float]]:

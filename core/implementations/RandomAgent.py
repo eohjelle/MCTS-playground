@@ -3,8 +3,9 @@ from core.state import State
 from core.tree_search import Node
 from core.types import ActionType, ValueType
 import random
+from typing import Generic
 
-class RandomAgent(Agent[ActionType, ValueType]):
+class RandomAgent(Agent[ActionType]):
     """Agent that selects actions randomly."""
 
     def __init__(self, state: State[ActionType]):

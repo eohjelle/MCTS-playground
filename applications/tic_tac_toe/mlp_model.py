@@ -50,11 +50,12 @@ class TicTacToeModelInterface(TicTacToeBaseModelInterface):
         self.model = TicTacToeMLP(hidden_size=hidden_size, device=device)
         self.model.eval()  # Set to evaluation mode
     
-    def encode_state(self, state: TicTacToeState) -> torch.Tensor:
+    @staticmethod
+    def encode_state(state: TicTacToeState, device: torch.device) -> torch.Tensor:
         """Convert board state to neural network input tensor."""
         # Create two 3x3 planes: one for X positions, one for O positions
-        x_plane = torch.zeros(3, 3, device=self.model._device)
-        o_plane = torch.zeros(3, 3, device=self.model._device)
+        x_plane = torch.zeros(3, 3, device=device)
+        o_plane = torch.zeros(3, 3, device=device)
         
         for i in range(3):
             for j in range(3):

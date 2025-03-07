@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List
+from typing import List, Tuple, Optional
 from enum import Enum
 from core.tree_search import ActionType, State
 from copy import deepcopy
@@ -51,7 +51,7 @@ def new_board(rows, cols):
     return board
 
 
-class DotsAndBoxesGameState(State):
+class DotsAndBoxesGameState(State[Tuple[int, int]]):
     def __init__(self, rows=MAX_SIZE, cols=MAX_SIZE, board_state=None, edge_owners = None, player_turn=P1):
         if board_state==None:
             self.board = new_board(rows, cols)
@@ -147,10 +147,10 @@ class DotsAndBoxesGameState(State):
         list_of_moves = list(zip(indices[0], indices[1]))
         return [tuple(x.item() for x in tpl) for tpl in list_of_moves]
     
-    def is_winner(self) -> int:
+    def is_winner(self) -> Optional[int]:
         if self.remaining_moves > 0:
             print("Game not yet over.")
-            pass
+            return None
         else:
             if self.scores[P1]>self.scores[P2]:
                 winner = P1
@@ -172,11 +172,11 @@ class DotsAndBoxesGameState(State):
 
 
     #Methods below needed for integration with tree_search
-    def get_legal_actions(self) -> List[ActionType]:
+    def get_legal_actions(self) -> List[Tuple[int, int]]:
         """Return list of legal actions at this state."""
         return self.available_moves_index_list
 
-    def apply_action(self, action: ActionType) -> 'State[ActionType]':
+    def apply_action(self, action: Tuple[int, int]) -> 'DotsAndBoxesGameState':
         """Apply action to state and return new state."""
         nextState = deepcopy(self)
         nextState.placeEdge(action)
