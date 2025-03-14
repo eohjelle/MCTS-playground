@@ -1,10 +1,16 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from typing import Dict, Tuple
-from applications.tic_tac_toe.model import TicTacToeBaseModelInterface
-from applications.tic_tac_toe.game_state import TicTacToeState
+from typing import TypedDict
 
+class TransformerInitParams(TypedDict):
+    attention_layers: int
+    embed_dim: int
+    num_heads: int
+    feedforward_dim: int
+    output_head_dim: int
+    dropout: float
+    norm_first: bool
+    activation: str
 
 class TicTacToeTransformer(nn.Module):
     """
@@ -121,52 +127,3 @@ class TicTacToeTransformer(nn.Module):
             "policy": policy,
             "value": value
         }
-
-
-class TicTacToeTransformerInterface(TicTacToeBaseModelInterface):
-    def __init__(
-        self, 
-        device: torch.device,
-        attention_layers: int = 2,
-        embed_dim: int = 9,
-        num_heads: int = 3,
-        feedforward_dim: int = 27,
-        output_head_dim: int = 16,
-        dropout: float = 0.1,
-        norm_first: bool = True,
-        activation: str = 'relu'
-    ):
-        self.model = TicTacToeTransformer(
-            attention_layers=attention_layers,
-            embed_dim=embed_dim,
-            num_heads=num_heads,
-            feedforward_dim=feedforward_dim,
-            output_head_dim=output_head_dim,
-            dropout=dropout,
-            norm_first=norm_first,
-            activation=activation
-        )
-        self.model.to(device)
-        self.model.eval()  # Set to evaluation mode
-    
-    @staticmethod
-    def encode_state(state: TicTacToeState, device: torch.device) -> torch.Tensor:
-        """Convert board state to neural network input tensor."""
-        # Create tensor of board state indices (0=empty, 1=X, 2=O)
-        board_tensor = torch.zeros(9, device=device, dtype=torch.int64)
-        
-        for i in range(3):
-            for j in range(3):
-                idx = i * 3 + j
-                if state.board[i][j] == 'X':
-                    board_tensor[idx] = 1
-                elif state.board[i][j] == 'O':
-                    board_tensor[idx] = 2
-    
-        # If it's O's turn, swap X and O encodings so 1.0 correspond to "our" pieces
-        if state.current_player == -1:
-            board_tensor = torch.where(board_tensor == 1, torch.tensor(3, device=device), board_tensor)
-            board_tensor = torch.where(board_tensor == 2, torch.tensor(1, device=device), board_tensor)
-            board_tensor = torch.where(board_tensor == 3, torch.tensor(2, device=device), board_tensor)
-
-        return board_tensor  # Embedding layer expects long tensor

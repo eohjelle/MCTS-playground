@@ -34,6 +34,18 @@
                 "PYTHONPATH": "${workspaceFolder}"
             },
             "args": ["--model", "transformer"]
+        },
+        {
+            "name": "Python: Tic Tac Toe Train Experimental Transformer",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/applications/tic_tac_toe/train.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": ["--model", "experimental_transformer"]
         }
     ]
 } 

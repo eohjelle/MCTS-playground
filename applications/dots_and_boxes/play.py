@@ -1,9 +1,11 @@
 from typing import Tuple, Union, Optional
+from core import ModelInterface
 from core.implementations.MCTS import MCTS
 from core.implementations.AlphaZero import AlphaZero, AlphaZeroModelAgent, AlphaZeroValue, AlphaZeroConfig
 from core.implementations.RandomAgent import RandomAgent
 from applications.dots_and_boxes.game_state import *
-from applications.dots_and_boxes.NNmodels.SimpleMLP import DotsAndBoxesMLPInterface
+from applications.dots_and_boxes.NNmodels.SimpleMLP import SimpleMLP
+from applications.dots_and_boxes.encoder import DABSimpleTensorMapping, DABMultiLayerTensorMapping
 #from applications.dots_and_boxes.NNmodels.transformer import DotsAndBoxesTransformerInterface
 import torch
 import os
@@ -66,14 +68,22 @@ def create_agent(initial_state: DotsAndBoxesGameState, agent_type: str) -> Optio
             
         # Setup device and model
         device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
-        if model_type == 'mlp':
-            model = DotsAndBoxesMLPInterface(device=device)
-        else:  # transformer
-            model = DotsAndBoxesTransformerInterface(device=device)
+        match model_type:
+            case 'mlp':
+                model_name = 'dots_and_boxes_mlp'
+                model_architecture = SimpleMLP
+                tensor_mapping = DABSimpleTensorMapping()
+            case 'transformer':
+                raise NotImplementedError("Transformer model not implemented yet")
+            case _:
+                raise ValueError(f"Invalid model type: {model_type}")
             
         # Load checkpoint if it exists
-        if os.path.exists(f"applications/tic_tac_toe/checkpoints/{model_type}/best_model.pt"):
-            model.load_checkpoint(f"applications/tic_tac_toe/checkpoints/{model_type}/best_model.pt")
+        if os.path.exists(f"applications/dots_and_boxes/checkpoints/{model_type}/best_model.pt"):
+            model = ModelInterface.from_file(
+                model_architecture=model_architecture,
+                path=f"applications/dots_and_boxes/checkpoints/{model_type}/best_model.pt"
+            )
             
         # Create appropriate agent type
         if agent_type == 'alphazero':
@@ -81,6 +91,7 @@ def create_agent(initial_state: DotsAndBoxesGameState, agent_type: str) -> Optio
                 initial_state=initial_state,
                 num_simulations=100,
                 model=model,
+                tensor_mapping=tensor_mapping,
                 params=AlphaZeroConfig(
                     exploration_constant=1.0,
                     dirichlet_alpha=0.3,
@@ -89,7 +100,7 @@ def create_agent(initial_state: DotsAndBoxesGameState, agent_type: str) -> Optio
                 )
             )
         else:  # model
-            return AlphaZeroModelAgent(initial_state, model)
+            return AlphaZeroModelAgent(initial_state, model, tensor_mapping)
 
 
 def play_game(

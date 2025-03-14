@@ -1,14 +1,12 @@
+from core.model_interface import TensorMapping
+from typing import Tuple, Dict, Any
 import torch
-import torch.nn.functional as F
-from typing import Dict, Tuple, Any
-from core.model_interface import ModelInterface
-from core.implementations.AlphaZero import AlphaZeroTarget
-from applications.tic_tac_toe.game_state import TicTacToeState
 from core.data_structures import TrainingExample
+from applications.tic_tac_toe.game_state import TicTacToeState
+from core.implementations.AlphaZero import AlphaZeroTarget
+import torch.nn.functional as F
 
-class TicTacToeBaseModelInterface(ModelInterface[Tuple[int, int], AlphaZeroTarget]):
-    """Base class for Tic-Tac-Toe model interfaces containing common functionality."""
-    
+class BaseTensorMapping:
     @staticmethod
     def decode_output(output: Dict[str, torch.Tensor], state: TicTacToeState) -> AlphaZeroTarget:
         """Convert raw model output to policy dictionary and value."""
@@ -68,7 +66,52 @@ class TicTacToeBaseModelInterface(ModelInterface[Tuple[int, int], AlphaZeroTarge
 
         return {
             "policy": policy,
-            "value": torch.tensor([value], device=device)
+            "value": torch.tensor(value, device=device)
         }, {
             "legal_actions": legal_actions
         }
+    
+class MLPTensorMapping(BaseTensorMapping):
+    @staticmethod
+    def encode_state(state: TicTacToeState, device: torch.device) -> torch.Tensor:
+        """Convert board state to neural network input tensor."""
+        # Create two 3x3 planes: one for X positions, one for O positions
+        x_plane = torch.zeros(3, 3, device=device)
+        o_plane = torch.zeros(3, 3, device=device)
+        
+        for i in range(3):
+            for j in range(3):
+                if state.board[i][j] == 'X':
+                    x_plane[i, j] = 1.0
+                elif state.board[i][j] == 'O':
+                    o_plane[i, j] = 1.0
+        
+        # Stack and flatten the planes
+        # If it's O's turn, swap the planes so O is always "our" pieces
+        if state.current_player == -1:  # O's turn
+            x_plane, o_plane = o_plane, x_plane
+            
+        return torch.cat([x_plane.flatten(), o_plane.flatten()])
+    
+class TokenizedTensorMapping(BaseTensorMapping):
+    @staticmethod
+    def encode_state(state: TicTacToeState, device: torch.device) -> torch.Tensor:
+        """Convert board state to neural network input tensor."""
+        # Create tensor of board state indices (0=empty, 1=X, 2=O)
+        board_tensor = torch.zeros(9, device=device, dtype=torch.int64)
+        
+        for i in range(3):
+            for j in range(3):
+                idx = i * 3 + j
+                if state.board[i][j] == 'X':
+                    board_tensor[idx] = 1
+                elif state.board[i][j] == 'O':
+                    board_tensor[idx] = 2
+    
+        # If it's O's turn, swap X and O encodings so 1.0 correspond to "our" pieces
+        if state.current_player == -1:
+            board_tensor = torch.where(board_tensor == 1, torch.tensor(3, device=device), board_tensor)
+            board_tensor = torch.where(board_tensor == 2, torch.tensor(1, device=device), board_tensor)
+            board_tensor = torch.where(board_tensor == 3, torch.tensor(2, device=device), board_tensor)
+
+        return board_tensor  # Embedding layer expects long tensor

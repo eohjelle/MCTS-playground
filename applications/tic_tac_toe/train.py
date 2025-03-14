@@ -1,17 +1,18 @@
 import torch
 import argparse
-from core.wandb import init_wandb
-from core.implementations.AlphaZero import AlphaZeroTrainer, AlphaZeroConfig
-from core.implementations.MCTS import MCTS
-from core.implementations.RandomAgent import RandomAgent
-from applications.tic_tac_toe.mlp_model import TicTacToeModelInterface
-from applications.tic_tac_toe.transformer_model import TicTacToeTransformerInterface
+from core import init_wandb, ModelInterface
+from core.implementations import AlphaZeroTrainer, AlphaZeroConfig, MCTS, RandomAgent
+from applications.tic_tac_toe.mlp_model import MLPInitParams, TicTacToeMLP  
+from applications.tic_tac_toe.transformer_model import TransformerInitParams, TicTacToeTransformer
+from applications.tic_tac_toe.experimental_transformer import ExperimentalTransformerInitParams, TicTacToeExperimentalTransformer
 from applications.tic_tac_toe.game_state import TicTacToeState
+from applications.tic_tac_toe.tensor_mapping import MLPTensorMapping, TokenizedTensorMapping
 from wandb.sdk.wandb_run import Run
 
 def train(
     config,
-    model: TicTacToeModelInterface | TicTacToeTransformerInterface,
+    model: ModelInterface,
+    model_tensor_mapping: MLPTensorMapping | TokenizedTensorMapping,
     use_wandb: bool,
     wandb_watch_params,
     wandb_run: Run | None = None
@@ -38,6 +39,7 @@ def train(
 
     trainer = AlphaZeroTrainer(
         model=model,
+        tensor_mapping=model_tensor_mapping,
         replay_buffer=replay_buffer,
         **config['trainer_params']
     )
@@ -66,25 +68,33 @@ def train(
 # Model-specific parameters passed to the model constructor
 # These are also used for loading models from wandb artifacts in play.py
 
-mlp_model_params = {
+mlp_model_params: MLPInitParams = {
     'hidden_size': 64
 }
 
-transformer_model_params = {
+transformer_model_params: TransformerInitParams = {
     'attention_layers': 2,
     'embed_dim': 16,
     'num_heads': 4,
+    'output_head_dim': 16,
     'feedforward_dim': 64,
     'dropout': 0.0,
     'norm_first': True,
     'activation': 'relu'
 }
 
+experimental_transformer_params: ExperimentalTransformerInitParams = {
+    'embed_dim': 32,
+    'num_heads': 4
+}
+
 if __name__ == "__main__":
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Train a Tic-Tac-Toe model')
-    parser.add_argument('--model', type=str, choices=['mlp', 'transformer'], default='mlp',
-                      help='Model architecture to train (mlp or transformer)')
+    parser.add_argument('--model', type=str, 
+                      choices=['mlp', 'transformer', 'experimental_transformer'], 
+                      default='mlp',
+                      help='Model architecture to train (mlp, transformer, or experimental_transformer)')
     parser.add_argument('--wandb', action='store_true', help='Whether to use Weights & Biases logging')
     parser.add_argument('--wandb_project', type=str, default='AlphaZero-TicTacToe', help='Weights & Biases project name')
     parser.add_argument('--wandb_dir', type=str, default='applications/tic_tac_toe/runs', 
@@ -99,13 +109,29 @@ if __name__ == "__main__":
 
     # Model-specific parameters
     if args.model == 'mlp':
+        model_name = 'tic_tac_toe_mlp'
         model_params = mlp_model_params
-        model = TicTacToeModelInterface(device=device, **model_params)
+        model_architecture = TicTacToeMLP
+        model_tensor_mapping = MLPTensorMapping()
     elif args.model == 'transformer':
+        model_name = 'tic_tac_toe_transformer'
         model_params = transformer_model_params
-        model = TicTacToeTransformerInterface(device=device, **model_params)
+        model_architecture = TicTacToeTransformer
+        model_tensor_mapping = TokenizedTensorMapping()
+    elif args.model == 'experimental_transformer':
+        model_name = 'tic_tac_toe_experimental_transformer'
+        model_params = experimental_transformer_params
+        model_architecture = TicTacToeExperimentalTransformer
+        model_tensor_mapping = TokenizedTensorMapping()
     else:
         raise ValueError(f"Invalid model type: {args.model}")
+    
+    # Initialize model
+    model = ModelInterface(
+        model_architecture=model_architecture,
+        init_params=model_params,
+        device=device
+    )
 
     # AlphaZero parameters
     alphazero_config = AlphaZeroConfig(
@@ -172,6 +198,7 @@ if __name__ == "__main__":
     train(
         config=config,
         model=model,
+        model_tensor_mapping=model_tensor_mapping,
         use_wandb=args.wandb,
         wandb_watch_params=wandb_watch_params
     ) 

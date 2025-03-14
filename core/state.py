@@ -1,4 +1,4 @@
-from typing import Protocol, List
+from typing import Protocol, List, Self
 from core.types import ActionType
 
 class State(Protocol[ActionType]):
@@ -6,7 +6,7 @@ class State(Protocol[ActionType]):
         """Return list of legal actions at this state."""
         ...
 
-    def apply_action(self, action: ActionType) -> 'State[ActionType]':
+    def apply_action(self, action: ActionType) -> Self:
         """Apply action to state and return new state."""
         ...
     

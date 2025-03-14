@@ -1,13 +1,8 @@
 import torch as t
 import torch.nn as nn
-import torch.nn.functional as F
 from typing import Dict
 from game_state import *
-from applications.dots_and_boxes.NNmodels.model import DotsAndBoxesBaseModelInterface
-from encoder import simpleEncode
-from torchtyping import TensorType
 import os
-from math import copysign
 
 
 class SimpleMLP(nn.Module):
@@ -52,20 +47,4 @@ class SimpleMLP(nn.Module):
 
         file_name = os.path.join(model_folder_path, file_name)
         t.save(self.state_dict(), file_name)
-    
-
-class DotsAndBoxesMLPInterface(DotsAndBoxesBaseModelInterface):
-    def __init__(self, device: t.device = t.device('cpu')):
-        self.model = SimpleMLP(device=device)
-        # Initialize weights with small random values
-        for param in self.model.parameters():
-            nn.init.normal_(param, mean=0.0, std=0.02)
-        self.model.eval()  # Set to evaluation mode
-    
-    def encode_state(self, state: DotsAndBoxesGameState) -> t.Tensor:
-        """Convert board state to neural network input tensor."""
-
-        encoded_board = simpleEncode(state)
-        encoded_board = encoded_board.to(device=self.model._device)
-        return encoded_board.flatten()
 

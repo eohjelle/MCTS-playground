@@ -1,12 +1,11 @@
-from typing import Tuple, Union, Optional
-from core.agent import Agent
-from core.implementations.MCTS import MCTS
-from core.implementations.AlphaZero import AlphaZero, AlphaZeroModelAgent, AlphaZeroConfig
-from core.implementations.RandomAgent import RandomAgent
-from core.implementations.Minimax import Minimax
+from typing import Tuple, Optional
+from core import Agent, ModelInterface
+from core.implementations import AlphaZero, AlphaZeroModelAgent, AlphaZeroConfig, MCTS, Minimax, RandomAgent
 from applications.tic_tac_toe.game_state import TicTacToeState
-from applications.tic_tac_toe.mlp_model import TicTacToeModelInterface
-from applications.tic_tac_toe.transformer_model import TicTacToeTransformerInterface
+from applications.tic_tac_toe.mlp_model import TicTacToeMLP, MLPInitParams
+from applications.tic_tac_toe.transformer_model import TicTacToeTransformer, TransformerInitParams
+from applications.tic_tac_toe.experimental_transformer import TicTacToeExperimentalTransformer, ExperimentalTransformerInitParams
+from applications.tic_tac_toe.tensor_mapping import MLPTensorMapping, TokenizedTensorMapping
 import torch
 import wandb
 import os
@@ -62,49 +61,65 @@ def create_agent(
     else:  # alphazero or model
         # Get model type
         while True:
-            model_type = input("Choose model type (mlp/transformer): ").lower()
-            if model_type in ['mlp', 'transformer']:
+            model_type = input("Choose model type (mlp/transformer/experimental_transformer): ").lower()
+            if model_type in ['mlp', 'transformer', 'experimental_transformer']:
                 break
-            print("Please enter mlp or transformer")
-            
-        # Setup device and model
-        device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
-        if model_type == 'mlp':
-            from applications.tic_tac_toe.train import mlp_model_params
-            model = TicTacToeModelInterface(device=device, **mlp_model_params)
-        else:  # transformer
-            from applications.tic_tac_toe.train import transformer_model_params
-            model = TicTacToeTransformerInterface(device=device, **transformer_model_params)
-            
-        # Load checkpoint if it exists
+            print("Please enter mlp, transformer, or experimental_transformer")
+
+        # Setup model
+        match model_type:
+            case 'mlp':
+                model_name = 'tic_tac_toe_mlp'
+                model_architecture = TicTacToeMLP
+                model_tensor_mapping = MLPTensorMapping
+            case 'transformer':
+                model_name = 'tic_tac_toe_transformer'
+                model_architecture = TicTacToeTransformer
+                model_tensor_mapping = TokenizedTensorMapping
+            case 'experimental_transformer':
+                model_name = 'tic_tac_toe_experimental_transformer'
+                model_architecture = TicTacToeExperimentalTransformer
+                model_tensor_mapping = TokenizedTensorMapping
+            case _:
+                raise ValueError(f"Invalid model type: {model_type}")
+        
         try:
-            os.makedirs("applications/tic_tac_toe/downloaded_models", exist_ok=True)
-            model.load_from_wandb_artifact(
-                model_name=f"{model_type}_model",
+            os.makedirs("checkpoints", exist_ok=True)
+            model = ModelInterface.from_wandb_artifact(
+                model_architecture=model_architecture,
                 project=wandb_project,
-                root_dir="applications/tic_tac_toe/downloaded_models",
+                model_name=model_name,
+                artifact_dir="checkpoints",
                 run_id=wandb_run_id,
                 model_version="latest"
             )
-            print(f"Loaded {model_type} model from wandb")
         except Exception as e:
             print(f"Error loading {model_type} model from wandb: {e}")
-            
+
         # Create appropriate agent type
-        if agent_type == 'alphazero':
-            return AlphaZero(
-                initial_state=initial_state,
-                model=model,
-                num_simulations=100,
-                params=AlphaZeroConfig(
-                    exploration_constant=1.414,
-                    dirichlet_alpha=0.0,
-                    dirichlet_epsilon=0.0,
+        match agent_type:
+            case 'alphazero':
+                return AlphaZero(
+                    initial_state=initial_state,
+                    model=model,
+                    tensor_mapping=model_tensor_mapping,
+                    num_simulations=100,
+                    params=AlphaZeroConfig(
+                        exploration_constant=1.414,
+                        dirichlet_alpha=0.0,
+                        dirichlet_epsilon=0.0,
+                        temperature=0.0
+                    )
+                )
+            case 'model':
+                return AlphaZeroModelAgent(
+                    initial_state=initial_state,
+                    model=model,
+                    tensor_mapping=model_tensor_mapping,
                     temperature=0.0
                 )
-            )
-        else:  # model
-            return AlphaZeroModelAgent(initial_state, model)
+            case _:
+                raise ValueError(f"Invalid agent type: {agent_type}")
 
 def play_game(
     x_agent: Optional[Agent],

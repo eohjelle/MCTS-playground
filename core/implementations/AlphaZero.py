@@ -5,9 +5,10 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from core.tree_search import State, Node, TreeSearch
-from core.trainer import TreeSearchTrainer, ModelInterface, TrainingExample, ReplayBuffer
+from core.trainer import TreeSearchTrainer, TrainingExample, ReplayBuffer
 from core.types import ActionType
 from core.agent import Agent
+from core.model_interface import ModelInterface, TensorMapping
 import random
 
 @dataclass
@@ -49,7 +50,8 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation], Gen
         self, 
         initial_state: State[ActionType],
         num_simulations: int,
-        model: ModelInterface[ActionType, AlphaZeroTarget],
+        model: ModelInterface,
+        tensor_mapping: TensorMapping[ActionType, AlphaZeroTarget],
         params: AlphaZeroConfig
     ):
         """Initialize AlphaZero tree search.
@@ -63,6 +65,7 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation], Gen
                 - dirichlet_alpha: Alpha parameter for Dirichlet noise
                 - dirichlet_epsilon: Weight of Dirichlet noise in root prior
                 - temperature: Controls exploration in action selection (higher means more uniform)
+            tensor_mapping: Maps between game states and tensor representations
         """
         self.root = Node(
             initial_state,
@@ -75,6 +78,7 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation], Gen
         )
         self.num_simulations = num_simulations
         self._model = model
+        self._tensor_mapping = tensor_mapping
         self._exploration_constant = params.get("exploration_constant", 1.0)
         self._dirichlet_alpha = params.get("dirichlet_alpha", 0.3)
         self._dirichlet_epsilon = params.get("dirichlet_epsilon", 0.25)
@@ -114,7 +118,7 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation], Gen
             return {}, node.state.get_reward(node.state.current_player), node.state.current_player
         
         # Get policy and value from neural network
-        policy, value = self._model.predict(node.state)
+        policy, value = self._model.predict(self._tensor_mapping, node.state)
         
         return policy, value, node.state.current_player
     
@@ -190,7 +194,8 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTa
     def __init__(
         self,
         *,
-        model: ModelInterface[ActionType, AlphaZeroTarget],
+        model: ModelInterface,
+        tensor_mapping: TensorMapping[ActionType, AlphaZeroTarget],
         replay_buffer: Optional[ReplayBuffer] = None,
         replay_buffer_max_size: int = 100000,
         value_softness: float = 0.0,
@@ -201,10 +206,12 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTa
         
         Args:
             model: Neural network for state evaluation
+            tensor_mapping: Maps between game states and tensor representations
             replay_buffer: Optional existing replay buffer to start with
             replay_buffer_max_size: Maximum number of examples in replay buffer
         """
         self.model = model 
+        self.tensor_mapping = tensor_mapping
         self.replay_buffer = replay_buffer or ReplayBuffer(max_size = replay_buffer_max_size)
         self.value_softness = value_softness
         self.mask_illegal_moves = mask_illegal_moves
@@ -222,6 +229,7 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTa
             initial_state=state,
             num_simulations=num_simulations,
             model=self.model,
+            tensor_mapping=self.tensor_mapping,
             params=params
         )
     
@@ -316,7 +324,8 @@ class AlphaZeroModelAgent(Agent[ActionType]):
     def __init__(
             self, 
             initial_state: State[ActionType], 
-            model: ModelInterface[ActionType, AlphaZeroTarget],
+            model: ModelInterface,
+            tensor_mapping: TensorMapping[ActionType, AlphaZeroTarget],
             temperature: float = 0.0
         ):
         self.root = Node[ActionType, AlphaZeroValue](
@@ -329,10 +338,11 @@ class AlphaZeroModelAgent(Agent[ActionType]):
             )
         )
         self.model = model
+        self.tensor_mapping = tensor_mapping
         self.temperature = temperature
 
     def __call__(self) -> ActionType:
-        policy, _ = self.model.predict(self.root.state)  # Access the state inside the node
+        policy, _ = self.model.predict(self.tensor_mapping, self.root.state)  # Access the state inside the node
         keys, probs = zip(*policy.items())
         
         # Handle temperature=0 case: choose uniformly among max probability actions

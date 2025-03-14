@@ -1,108 +1,151 @@
-from typing import Protocol, Dict, runtime_checkable, Optional, Tuple, Any
+from typing import Generic, Optional, Self, Type, Dict
 import torch
-from core.data_structures import TrainingExample
+from core.tensor_mapping import TensorMapping
 from core.tree_search import State
-from core.types import ActionType, TargetType
+from core.types import ActionType, TargetType, ModelInitParams
 import os
 import wandb
+from wandb.sdk.wandb_run import Run
 
-@runtime_checkable
-class ModelInterface(Protocol[ActionType, TargetType]):
+class ModelInterface(Generic[ModelInitParams]):
     """Protocol for (deep learning) models used in tree search.
     
     This interface acts as a layer between tree search algorithms and PyTorch models.
     Its main responsibility is converting between game states and PyTorch tensors.
 
-    Note that the encode_state, decode_output, and encode_target methods are for 
-    single (not batched) states/targets. The batched model input is a stacked tensor of 
-    encoded states, and the batched model output is a dictionary of stacked tensors.
-
     The model attribute gives direct access to the underlying PyTorch model for forward(),
     parameters(), etc.
     """
     model: torch.nn.Module
+    init_params: ModelInitParams
 
-    @staticmethod
-    def encode_state(state: State[ActionType], device: torch.device) -> torch.Tensor:
-        """Convert a single state to model input tensor."""
-        ...
+    def __init__(self, model_architecture: Type[torch.nn.Module], init_params: ModelInitParams, device: torch.device):
+        self.model = model_architecture(**init_params)
+        self.model.to(device)
+        self.model.eval()
+        self.init_params = init_params
 
-    @staticmethod
-    def decode_output(output: Dict[str, torch.Tensor], state: State) -> TargetType:
-        """Convert raw model outputs to game-specific target format.
-        
-        This is used during inference to convert model outputs (dictionary of tensors)
-        into a format the game understands (e.g. dictionary of action probabilities).
-        """
-        ...
-    
-    @staticmethod
-    def encode_example(example: TrainingExample[ActionType, TargetType], device: torch.device) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
-        """Convert a training example into tensor targets and auxiliary data for loss computation.
-        
-        This converts game-specific targets (e.g. dictionaries of action probabilities)
-        into a dictionary of tensors that can be compared with model outputs.
-
-        Returns a tuple of (targets, data), where targets is a dictionary of tensors and data is a dictionary of auxiliary tensors (e.g. masks for legal actions).
-        """
-        ...
-    
-    def predict(self, state: State[ActionType]) -> TargetType:
-        """Convenience method for single-state inference."""
+    def predict(self, tensor_mapping: TensorMapping[ActionType, TargetType], state: State[ActionType]) -> TargetType:
+        """Convenience function for single-state inference."""
         # We add the batch dimension before model inference and remove it after.
         device = next(self.model.parameters()).device
-        encoded_state = self.encode_state(state, device).unsqueeze(0)
+        encoded_state = tensor_mapping.encode_state(state, device).unsqueeze(0)
         outputs = self.model(encoded_state)
         outputs = {k: v.squeeze(0) for k, v in outputs.items()}
-        return self.decode_output(outputs, state)
+        return tensor_mapping.decode_output(outputs, state)
     
-    def save_checkpoint(self, path: str) -> None:
+    def save_checkpoint(self, path: str, metadata: Dict[str, str | int | float] = {}) -> None:
         """Save model checkpoint."""
         torch.save({
-            'model_state_dict': self.model.state_dict(),
-            'model_config': getattr(self.model, 'config', None)  # Save model config if available
+            **metadata,
+            'state_dict': self.model.state_dict(),
+            'init_params': self.init_params
         }, path)
-    
-    def load_checkpoint(self, path: str, device: Optional[str] = None) -> None:
-        """Load model checkpoint to the specified device or default device.
+
+    @classmethod
+    def from_file(
+        cls,
+        *,
+        model_architecture: Type[torch.nn.Module],
+        path: str, 
+        device: Optional[torch.device] = None
+    ) -> Self:
+        """Load a model interface from a checkpoint file.
         
         Args:
             path: Path to the checkpoint file
-            device: Target device to load the model onto (e.g., 'cpu', 'cuda:0')
-                    If None, will use the default device (cuda, mps, or cpu based on availability)
+            device: Device to load the model on (system-specific, not part of model config)
+            
+        Returns:
+            A new model interface instance with the loaded model
         """
         if device is None:
-            device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
-        
-        # Load checkpoint to specified device
+            device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu')
         checkpoint = torch.load(path, map_location=device)
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-        self.model.to(device)
-        self.model.eval()
-
-    def load_from_wandb_artifact(
+        model_interface = cls(
+            model_architecture=model_architecture,
+            init_params=checkpoint['init_params'],
+            device=device
+        )
+        model_interface.model.load_state_dict(checkpoint['state_dict'])
+        model_interface.model.to(device)
+        model_interface.model.eval()
+        return model_interface
+    
+    def save_wandb_artifact(
         self,
+        *,
         model_name: str,
-        project: str,
-        root_dir: str,
-        run_id: Optional[str] = None,
-        model_version: str = "latest",
-        device: Optional[str] = None,
+        wandb_run: Run | None = None,
+        project: str | None = None,
+        description: str | None = None,
+        metadata: Dict[str, str | int | float] = {}
     ) -> None:
-        """Load a model from wandb artifacts.
+        """Save the model as a wandb artifact.
         
         Args:
-            model_name: Name of the model
+            model_name: Name of the artifact
+            wandb_run: Wandb run to save the artifact to. If None, will create a new run.
+            project: Name of the wandb project to save the artifact to, if wandb_run is None.
+            description: Description of the artifact
+        """
+        try:
+            run = wandb_run or wandb.init(project=project, job_type='create_artifact')
+            model_artifact = wandb.Artifact(
+                name=model_name,
+                type='model',
+                description=description,
+                metadata={
+                    **metadata,
+                    'model_architecture': self.model.__class__.__name__,
+                    'init_params': self.init_params
+                }
+            )
+            path = os.path.join(run.dir, f'{model_name}.pt')
+            self.save_checkpoint(path, metadata)
+            model_artifact.add_file(path)
+            run.log_artifact(model_artifact)
+            if wandb_run is None:
+                run.finish()
+        except Exception as e:
+            print(f"Error saving model artifact to wandb: {e}")
+            raise e
+    
+    @classmethod
+    def from_wandb_artifact(
+        cls,
+        *,
+        model_architecture: Type[torch.nn.Module],
+        project: str,
+        model_name: str,
+        artifact_dir: str,
+        run_id: Optional[str] = None,
+        model_version: str = "latest",
+        device: Optional[torch.device] = None,
+    ) -> Self:
+        """Initialize a model from a wandb artifact.
+        
+        Args:
             project: Wandb project name
-            root_dir: Directory to download artifacts to
+            model_name: Name of the model
+            artifact_dir: str,
             run_id: Optional run ID
             model_version: Version of the model to load
-            device: Device to load the model onto (e.g., 'cpu', 'cuda:0')
+            device: Device to load the model onto
         """
-        api = wandb.Api()
-        if run_id:
-            artifact = api.artifact(f'{project}/{run_id}/{model_name}:{model_version}')
-        else:
-            artifact = api.artifact(f'{project}/{model_name}:{model_version}')
-        artifact_dir = artifact.download(root=root_dir)
-        self.load_checkpoint(os.path.join(artifact_dir, f'{model_name}.pt'), device=device)
+        try:
+            api = wandb.Api()
+            if run_id:
+                artifact = api.artifact(f'{project}/{run_id}/{model_name}:{model_version}')
+            else:
+                artifact = api.artifact(f'{project}/{model_name}:{model_version}')
+            artifact_dir = artifact.download(root=artifact_dir)
+            model_interface = cls.from_file(
+                model_architecture=model_architecture,
+                path=os.path.join(artifact_dir, f'{model_name}.pt'),
+                device=device
+            )
+            return model_interface
+        except Exception as e:
+            print(f"Error loading model from wandb: {e}")
+            raise e
