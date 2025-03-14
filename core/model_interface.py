@@ -1,4 +1,4 @@
-from typing import Generic, Optional, Self, Type, Dict
+from typing import Generic, Optional, Self, Type, Dict, Any
 import torch
 from core.tensor_mapping import TensorMapping
 from core.tree_search import State
@@ -34,7 +34,7 @@ class ModelInterface(Generic[ModelInitParams]):
         outputs = {k: v.squeeze(0) for k, v in outputs.items()}
         return tensor_mapping.decode_output(outputs, state)
     
-    def save_checkpoint(self, path: str, metadata: Dict[str, str | int | float] = {}) -> None:
+    def save_checkpoint(self, path: str, metadata: Dict[str, Any] = {}) -> None:
         """Save model checkpoint."""
         torch.save({
             **metadata,
@@ -72,14 +72,14 @@ class ModelInterface(Generic[ModelInitParams]):
         model_interface.model.eval()
         return model_interface
     
-    def save_wandb_artifact(
+    def save_to_wandb(
         self,
         *,
         model_name: str,
         wandb_run: Run | None = None,
         project: str | None = None,
         description: str | None = None,
-        metadata: Dict[str, str | int | float] = {}
+        metadata: Dict[str, Any] = {}
     ) -> None:
         """Save the model as a wandb artifact.
         
@@ -112,13 +112,13 @@ class ModelInterface(Generic[ModelInitParams]):
             raise e
     
     @classmethod
-    def from_wandb_artifact(
+    def from_wandb(
         cls,
         *,
         model_architecture: Type[torch.nn.Module],
         project: str,
         model_name: str,
-        artifact_dir: str,
+        artifact_dir: Optional[str] = None,
         run_id: Optional[str] = None,
         model_version: str = "latest",
         device: Optional[torch.device] = None,

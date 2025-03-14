@@ -94,7 +94,7 @@ class ReplayBuffer:
         checkpoint = torch.load(path, map_location=device)
         return cls(**checkpoint)
 
-    def save_wandb_artifact(
+    def save_to_wandb(
         self,
         *,
         artifact_name: str,
@@ -121,12 +121,12 @@ class ReplayBuffer:
             raise e
     
     @classmethod
-    def from_wandb_artifact(
+    def from_wandb(
         cls,
         *,
         project: str,
         artifact_name: str,
-        artifact_dir: str,
+        artifact_dir: Optional[str] = None,
         run_id: Optional[str] = None,
         artifact_version: str = "latest",
         device: Optional[torch.device] = None,
