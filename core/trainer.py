@@ -3,7 +3,7 @@ from abc import abstractmethod
 import torch
 from core.tree_search import State, Node, TreeSearch
 from core.benchmark import Agent, benchmark
-from core.model_interface import ModelInterface
+from core.model_interface import ModelInterface, TensorMapping
 from core.data_structures import ReplayBuffer, TrainingExample
 from core.types import ActionType, ValueType, TargetType, TreeSearchParams
 import time
@@ -14,7 +14,8 @@ import wandb
 
 class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType, TreeSearchParams]):
     """Abstract base class for training models used in tree search."""
-    model: ModelInterface[ActionType, TargetType]
+    model: ModelInterface
+    tensor_mapping: TensorMapping[ActionType, TargetType]
     replay_buffer: ReplayBuffer
     
     @abstractmethod
@@ -102,8 +103,8 @@ class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType, TreeSearchPa
         device = next(self.model.model.parameters()).device
         self.replay_buffer.extend(
             examples, 
-            lambda state: self.model.encode_state(state, device), 
-            lambda example: self.model.encode_example(example, device)
+            lambda state: self.tensor_mapping.encode_state(state, device), 
+            lambda example: self.tensor_mapping.encode_example(example, device)
         )
 
     def train(

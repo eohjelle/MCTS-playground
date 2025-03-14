@@ -50,8 +50,9 @@ def new_board(rows, cols):
                 board[i][j] = EMPTY_EDGE
     return board
 
+DotsAndBoxesAction = Tuple[int, int]
 
-class DotsAndBoxesGameState(State[Tuple[int, int]]):
+class DotsAndBoxesGameState(State[DotsAndBoxesAction]):
     def __init__(self, rows=MAX_SIZE, cols=MAX_SIZE, board_state=None, edge_owners = None, player_turn=P1):
         if board_state==None:
             self.board = new_board(rows, cols)

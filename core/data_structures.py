@@ -1,8 +1,11 @@
 from dataclasses import dataclass, field
-from typing import Dict, Generic, Any, Callable, List, Tuple, Optional
+from typing import Dict, Generic, Any, Callable, List, Tuple, Optional, Self, Type
 from core.tree_search import State
 from core.types import ActionType, TargetType
 import torch
+from wandb.sdk.wandb_run import Run
+import wandb
+import os
 
 @dataclass
 class TrainingExample(Generic[ActionType, TargetType]):
@@ -77,7 +80,7 @@ class ReplayBuffer:
         }, path)
     
     @classmethod
-    def from_file(cls, path: str, device: Optional[torch.device] = None) -> 'ReplayBuffer':
+    def from_file(cls, path: str, device: Optional[torch.device] = None) -> Self:
         """Load replay buffer from disk to the specified device or default device.
         
         Args:
@@ -91,4 +94,65 @@ class ReplayBuffer:
         checkpoint = torch.load(path, map_location=device)
         return cls(**checkpoint)
 
+    def save_wandb_artifact(
+        self,
+        *,
+        artifact_name: str,
+        wandb_run: Run | None = None,
+        project: str | None = None,
+        description: str | None = None
+    ) -> None:
+        """Save the replay buffer as a wandb artifact."""
+        try:
+            run = wandb_run or wandb.init(project=project, job_type='create_artifact')
+            artifact = wandb.Artifact(
+                name=artifact_name,
+                type='dataset',
+                description=description
+            )
+            path = os.path.join(run.dir, f'{artifact_name}.pt')
+            self.save(path)
+            artifact.add_file(path)
+            run.log_artifact(artifact)
+            if wandb_run is None:
+                run.finish()
+        except Exception as e:
+            print(f"Error saving replay buffer artifact to wandb: {e}")
+            raise e
     
+    @classmethod
+    def from_wandb_artifact(
+        cls,
+        *,
+        project: str,
+        artifact_name: str,
+        artifact_dir: str,
+        run_id: Optional[str] = None,
+        artifact_version: str = "latest",
+        device: Optional[torch.device] = None,
+    ) -> Self:
+        """Initialize a replay buffer from a wandb artifact.
+        
+        Args:
+            project: Wandb project name
+            artifact_name: Name of the artifact
+            artifact_dir: str,
+            run_id: Optional run ID
+            artifact_version: Version of the artifact to load
+            device: Device to load the artifact onto
+        """
+        try:
+            api = wandb.Api()
+            if run_id:
+                artifact = api.artifact(f'{project}/{run_id}/{artifact_name}:{artifact_version}')
+            else:
+                artifact = api.artifact(f'{project}/{artifact_name}:{artifact_version}')
+            artifact_dir = artifact.download(root=artifact_dir)
+            replay_buffer = cls.from_file(
+                path=os.path.join(artifact_dir, f'{artifact_name}.pt'),
+                device=device
+            )
+            return replay_buffer
+        except Exception as e:
+            print(f"Error loading replay buffer from wandb: {e}")
+            raise e

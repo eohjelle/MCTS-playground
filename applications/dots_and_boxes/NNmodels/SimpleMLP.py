@@ -1,13 +1,8 @@
 import torch as t
 import torch.nn as nn
-import torch.nn.functional as F
 from typing import Dict
 from game_state import *
-from applications.dots_and_boxes.NNmodels.model import DotsAndBoxesBaseModelInterface
-from encoder import simpleEncode
-from torchtyping import TensorType
 import os
-from math import copysign
 
 
 class SimpleMLP(nn.Module):
@@ -36,12 +31,8 @@ class SimpleMLP(nn.Module):
 
         # Apply the mask: set the policy probabilities of illegal moves to a very low value
         if mask is not None:
-            policy_logits = policy_logits + (mask * -100)  #Apply a large negative value to illegal moves     
+            policy_logits = policy_logits + (mask * -1e10)  #Apply a large negative value to illegal moves     
         
-        #for numerical stability of the policy logits
-        max_logits = t.max(policy_logits)  # Find the maximum logit
-        policy_logits = policy_logits - max_logits
-
         # Value output (scalar)
         value = t.tanh(self.value_head(x))
 

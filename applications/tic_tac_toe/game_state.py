@@ -1,7 +1,10 @@
-from typing import List, Tuple, Optional
-from core.state import State
+from typing import List, Tuple, Optional, Self
+from core import State
 
-class TicTacToeState(State[Tuple[int, int]]):
+# Define TicTacToeAction as a type alias
+TicTacToeAction = Tuple[int, int]
+
+class TicTacToeState(State[TicTacToeAction]):
     def __init__(self, board: Optional[List[List[str]]] = None, current_player: int = 1):
         """Initialize TicTacToe state.
         
@@ -12,11 +15,11 @@ class TicTacToeState(State[Tuple[int, int]]):
         self.board = board if board is not None else [[''] * 3 for _ in range(3)]
         self._current_player = current_player
     
-    def get_legal_actions(self) -> List[Tuple[int, int]]:
+    def get_legal_actions(self) -> List[TicTacToeAction]:
         """Return list of empty positions as (row, col) tuples."""
         return [(i, j) for i in range(3) for j in range(3) if self.board[i][j] == '']
     
-    def apply_action(self, action: Tuple[int, int]) -> 'TicTacToeState':
+    def apply_action(self, action: TicTacToeAction) -> Self:
         """Return new state after applying action."""
         row, col = action
         if self.board[row][col] != '':
@@ -27,7 +30,7 @@ class TicTacToeState(State[Tuple[int, int]]):
         new_board[row][col] = 'X' if self._current_player == 1 else 'O'
         
         # Return new state with opposite player's turn
-        return TicTacToeState(new_board, -self._current_player)
+        return type(self)(new_board, -self._current_player)
     
     def is_terminal(self) -> bool:
         """Return True if game is over."""

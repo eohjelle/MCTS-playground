@@ -36,15 +36,16 @@
             "args": ["--model", "transformer"]
         },
         {
-            "name": "Python: Dots And Boxes Train MLP",
+            "name": "Python: Tic Tac Toe Train Experimental Transformer",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/applications/dots_and_boxes/train.py",
+            "program": "${workspaceFolder}/applications/tic_tac_toe/train.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
-            }
+            },
+            "args": ["--model", "experimental_transformer"]
         }
     ]
 } 
