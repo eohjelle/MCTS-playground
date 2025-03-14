@@ -2,14 +2,10 @@ from typing import Tuple, Optional
 from core import Agent, ModelInterface
 from core.implementations import AlphaZero, AlphaZeroModelAgent, AlphaZeroConfig, MCTS, Minimax, RandomAgent
 from applications.tic_tac_toe.game_state import TicTacToeState
-from applications.tic_tac_toe.mlp_model import TicTacToeMLP, MLPInitParams
-from applications.tic_tac_toe.transformer_model import TicTacToeTransformer, TransformerInitParams
-from applications.tic_tac_toe.experimental_transformer import TicTacToeExperimentalTransformer, ExperimentalTransformerInitParams
+from applications.tic_tac_toe.mlp_model import TicTacToeMLP
+from applications.tic_tac_toe.transformer_model import TicTacToeTransformer
+from applications.tic_tac_toe.experimental_transformer import TicTacToeExperimentalTransformer
 from applications.tic_tac_toe.tensor_mapping import MLPTensorMapping, TokenizedTensorMapping
-import torch
-import wandb
-import os
-import argparse
 
 def print_board(state: TicTacToeState) -> None:
     """Print the current board state."""
@@ -38,8 +34,7 @@ def get_human_action(state: TicTacToeState) -> Tuple[int, int]:
 def create_agent(
     initial_state: TicTacToeState,
     agent_type: str,
-    wandb_run_id: Optional[str] = None,
-    wandb_project: str = "AlphaZero-TicTacToe"
+    project: str = "AlphaZero-TicTacToe"
 ) -> Optional[Agent]:
     """Create an agent of the specified type.
     
@@ -69,29 +64,25 @@ def create_agent(
         # Setup model
         match model_type:
             case 'mlp':
-                model_name = 'tic_tac_toe_mlp'
+                model_name = 'mlp_model'
                 model_architecture = TicTacToeMLP
-                model_tensor_mapping = MLPTensorMapping
+                model_tensor_mapping = MLPTensorMapping()
             case 'transformer':
-                model_name = 'tic_tac_toe_transformer'
+                model_name = 'transformer_model'
                 model_architecture = TicTacToeTransformer
-                model_tensor_mapping = TokenizedTensorMapping
+                model_tensor_mapping = TokenizedTensorMapping()
             case 'experimental_transformer':
-                model_name = 'tic_tac_toe_experimental_transformer'
+                model_name = 'experimental_transformer_model'
                 model_architecture = TicTacToeExperimentalTransformer
-                model_tensor_mapping = TokenizedTensorMapping
+                model_tensor_mapping = TokenizedTensorMapping()
             case _:
                 raise ValueError(f"Invalid model type: {model_type}")
         
         try:
-            os.makedirs("checkpoints", exist_ok=True)
-            model = ModelInterface.from_wandb_artifact(
+            model = ModelInterface.from_wandb(
                 model_architecture=model_architecture,
-                project=wandb_project,
+                project=project,
                 model_name=model_name,
-                artifact_dir="checkpoints",
-                run_id=wandb_run_id,
-                model_version="latest"
             )
         except Exception as e:
             print(f"Error loading {model_type} model from wandb: {e}")
