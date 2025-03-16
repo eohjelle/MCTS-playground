@@ -119,7 +119,6 @@ class ModelInterface(Generic[ModelInitParams]):
         project: str,
         model_name: str,
         artifact_dir: Optional[str] = None,
-        run_id: Optional[str] = None,
         model_version: str = "latest",
         device: Optional[torch.device] = None,
     ) -> Self:
@@ -129,16 +128,12 @@ class ModelInterface(Generic[ModelInitParams]):
             project: Wandb project name
             model_name: Name of the model
             artifact_dir: str,
-            run_id: Optional run ID
             model_version: Version of the model to load
             device: Device to load the model onto
         """
         try:
             api = wandb.Api()
-            if run_id:
-                artifact = api.artifact(f'{project}/{run_id}/{model_name}:{model_version}')
-            else:
-                artifact = api.artifact(f'{project}/{model_name}:{model_version}')
+            artifact = api.artifact(f'{project}/{model_name}:{model_version}')
             artifact_dir = artifact.download(root=artifact_dir)
             model_interface = cls.from_file(
                 model_architecture=model_architecture,

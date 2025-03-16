@@ -127,7 +127,6 @@ class ReplayBuffer:
         project: str,
         artifact_name: str,
         artifact_dir: Optional[str] = None,
-        run_id: Optional[str] = None,
         artifact_version: str = "latest",
         device: Optional[torch.device] = None,
     ) -> Self:
@@ -137,16 +136,12 @@ class ReplayBuffer:
             project: Wandb project name
             artifact_name: Name of the artifact
             artifact_dir: str,
-            run_id: Optional run ID
             artifact_version: Version of the artifact to load
             device: Device to load the artifact onto
         """
         try:
             api = wandb.Api()
-            if run_id:
-                artifact = api.artifact(f'{project}/{run_id}/{artifact_name}:{artifact_version}')
-            else:
-                artifact = api.artifact(f'{project}/{artifact_name}:{artifact_version}')
+            artifact = api.artifact(f'{project}/{artifact_name}:{artifact_version}')
             artifact_dir = artifact.download(root=artifact_dir)
             replay_buffer = cls.from_file(
                 path=os.path.join(artifact_dir, f'{artifact_name}.pt'),

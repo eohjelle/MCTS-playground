@@ -34,7 +34,7 @@ class MaskedSimAttn(nn.Module):
         self.q_emb = nn.Linear(q_dim, dim, bias=bias)
         self.k_emb = nn.Linear(k_dim, dim, bias=bias)
         self.v_emb = nn.Linear(v_dim, dim, bias=bias)
-        self.out_emb = nn.Linear(dim, dim, bias=True)
+        self.out_emb = nn.Linear(dim, dim, bias=bias)
 
         # Initialize mask
         self.mask = nn.Parameter(0.01*torch.randn(self.num_heads, self.output_seq_len, self.input_seq_len))
@@ -58,8 +58,8 @@ class MaskedSimAttn(nn.Module):
         v = einops.rearrange(v, 'b s (h i) -> b h s i', h=self.num_heads)
         
         # Apply L1 normalization to k and v along the feature dimension
-        k = F.normalize(k, p=1, dim=-1)
-        v = F.normalize(v, p=1, dim=-1)
+        k = F.normalize(k, p=2, dim=-1)
+        v = F.normalize(v, p=2, dim=-1)
 
         # Initialize mask
         gate = (torch.tanh(self.mask) + 1)/2 # Values in (0, 1)
@@ -81,23 +81,45 @@ class TicTacToeExperimentalTransformer(nn.Module):
         super().__init__()
         self.input_embedding = nn.Embedding(3, embed_dim)
         self.pos_embedding = nn.Parameter(torch.zeros(1, 9, embed_dim))
+        self.norm1 = nn.LayerNorm(embed_dim)
         self.attn = MaskedSimAttn(
             dim = embed_dim,
             num_heads = num_heads,
-            input_seq_len = 9
+            input_seq_len = 9,
+            bias=True
         )
-        self.output = nn.Parameter(torch.randn(9, embed_dim, 10))
+        self.norm2 = nn.LayerNorm(embed_dim)
+        self.mlp = nn.Sequential(
+            nn.Linear(embed_dim, 4*embed_dim),
+            nn.ReLU(),
+            nn.Linear(4*embed_dim, embed_dim),
+        )
+        self.norm3 = nn.LayerNorm(embed_dim)
+        self.policy_head = nn.Linear(embed_dim, 1)
+        self.value_head = nn.Linear(9*embed_dim, 1)
 
     def forward(self, x):
         """
         Input: tensor x of shape (batch_size, 9), entries integers 0-2
         """
-        x = self.input_embedding(x) # (batch_size, 9, embed_dim)
-        x = self.attn(x, x, x + self.pos_embedding) # (batch_size, 9, embed_dim)
-        x = F.relu(x)
-        x = torch.einsum('b l i, l i j -> b j', x, self.output) # (batch_size, 10)
-        policy = x[:, :9] # (batch_size, 9)
-        value = torch.tanh(x[:, 9]) # (batch_size)
+        res = self.input_embedding(x) # (batch_size, 9, embed_dim)
+
+        # Transformer block
+        x = self.attn(res, res, res + self.pos_embedding) # (batch_size, 9, embed_dim)
+        x = self.norm2(x)
+        x = self.mlp(x)
+        x = self.norm3(x)
+
+        # Residual connection
+        res = res + x
+        
+        # Policy head
+        policy = self.policy_head(res).squeeze(-1) # (batch_size, 9)
+
+        # Value head
+        x = einops.rearrange(res, 'b l i -> b (l i)')
+        value = torch.tanh(self.value_head(x)).squeeze(-1) # (batch_size,)
+
         return {
             "policy": policy,
             "value": value
