@@ -18,7 +18,7 @@ class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType, TreeSearchPa
     tensor_mapping: TensorMapping[ActionType, TargetType]
     replay_buffer: ReplayBuffer
     
-    @abstractmethod
+
     def create_tree_search(self, state: State[ActionType], num_simulations: int, params: TreeSearchParams) -> TreeSearch:
         """Create a tree search instance for the given state.
         
@@ -29,7 +29,6 @@ class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType, TreeSearchPa
         """
         ...
     
-    @abstractmethod
     def extract_examples(self, game: List[Tuple[Node[ActionType, ValueType], ActionType]]) -> List[TrainingExample[ActionType, TargetType]]:
         """Create training examples from a game.
         
@@ -41,7 +40,6 @@ class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType, TreeSearchPa
         """
         ...
     
-    @abstractmethod
     def compute_loss(
         self,
         predictions: Dict[str, torch.Tensor],
@@ -150,10 +148,16 @@ class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType, TreeSearchPa
             model_name: Name of the model to save.
         Returns:
             None
-        
         """
         start_time = time.time()
-        best_score = 0.0
+
+        best_score = float('-inf')
+        if wandb_run:
+            try:
+                api = wandb.Api()
+                best_score = api.artifact(f'{wandb_run.project}/{model_name}_best').metadata['best_score']
+            except Exception as e:
+                print(f"Could not get best score for {model_name} from wandb: {e}\nUsing initial best score of -inf.")
         
         # Create checkpoints directory if specified
         if checkpoints_folder:
@@ -234,29 +238,18 @@ class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType, TreeSearchPa
                 if sum(stats['win_rate'] - stats['loss_rate'] for stats in eval_stats.values()) > best_score:
                     best_score = sum(stats['win_rate'] - stats['loss_rate'] for stats in eval_stats.values())
                     if wandb_run:
-                        # Save best model as artifact
-                        model_artifact = wandb.Artifact(
-                            f'{model_name}_best', type='model',
-                            description=f'Best model at iteration {iteration+1}'
-                        )
-                        best_model_path = os.path.join(wandb_run.dir, f'{model_name}_best.pt')
-                        self.model.save_checkpoint(best_model_path)
-                        model_artifact.add_file(best_model_path)
-                        wandb_run.log_artifact(model_artifact)
+                        self.model.save_to_wandb(wandb_run=wandb_run, model_name=f'{model_name}_best', metadata={'best_score': best_score})
+                    if checkpoints_folder:
+                        model_path = os.path.join(checkpoints_folder, f'{model_name}_best.pt')
+                        self.model.save_checkpoint(model_path, metadata={'best_score': best_score})
                     if verbose:
                         print(f"New best score: {best_score:.2%}")
                 
             # 4. Checkpointing
             if wandb_run and (iteration + 1) % checkpoint_frequency == 0:
                 # Save periodic checkpoint as artifact
-                model_artifact = wandb.Artifact(
-                    f'{model_name}_checkpoint', type='model',
-                    description=f'Model checkpoint at iteration {iteration+1}'
-                )
-                checkpoint_path = os.path.join(wandb_run.dir, f'{model_name}_checkpoint.pt')
-                self.model.save_checkpoint(checkpoint_path)
-                model_artifact.add_file(checkpoint_path)
-                wandb_run.log_artifact(model_artifact)
+                self.model.save_to_wandb(wandb_run=wandb_run, model_name=f'{model_name}')
+                self.replay_buffer.save_to_wandb(wandb_run=wandb_run, artifact_name=f'{model_name}_replay_buffer')
             
             # 5. Log iteration summary
             iter_time = time.time() - iter_start
@@ -283,25 +276,9 @@ class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType, TreeSearchPa
             wandb_run.summary['total_time_hours'] = total_time/3600
             wandb_run.summary['best_score'] = best_score
 
-            # Save the final model
-            model_artifact = wandb.Artifact(
-                f'{model_name}', type='model',
-                description=f'The model at the end of the training run.'
-            )
-            path = os.path.join(wandb_run.dir, f'{model_name}.pt')
-            self.model.save_checkpoint(path)
-            model_artifact.add_file(path)
-            wandb_run.log_artifact(model_artifact)
-
-            # Save the replay buffer
-            buffer_artifact = wandb.Artifact(
-                f'replay-buffer', type='dataset',
-                description=f'The replay buffer at the end of the training run.'
-            )
-            path = os.path.join(wandb_run.dir, f'replay_buffer.pt')
-            torch.save(self.replay_buffer, path)
-            buffer_artifact.add_file(path)
-            wandb_run.log_artifact(buffer_artifact)
+            # Save the final model and replay buffer to wandb
+            self.model.save_to_wandb(wandb_run=wandb_run, model_name=model_name, metadata={'best_score': best_score, 'training_hours': total_time/3600})
+            self.replay_buffer.save_to_wandb(wandb_run=wandb_run, artifact_name=f'{model_name}_replay_buffer')
 
     def train_iteration(
         self,

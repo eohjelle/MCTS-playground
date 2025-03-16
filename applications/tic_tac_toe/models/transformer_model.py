@@ -1,13 +1,13 @@
 import torch
 import torch.nn as nn
 from typing import TypedDict
+import einops
 
 class TransformerInitParams(TypedDict):
     attention_layers: int
     embed_dim: int
     num_heads: int
     feedforward_dim: int
-    output_head_dim: int
     dropout: float
     norm_first: bool
     activation: str
@@ -23,7 +23,6 @@ class TicTacToeTransformer(nn.Module):
             embed_dim: int,
             num_heads: int,
             feedforward_dim: int,
-            output_head_dim: int,
             dropout: float,
             norm_first: bool = True,
             activation: str = 'relu'
@@ -68,22 +67,10 @@ class TicTacToeTransformer(nn.Module):
                 self.activation = nn.GELU()
             case _:
                 raise ValueError(f"Invalid activation function: {activation}")
-
-        # Policy head using multi-head attention with learned queries
-        self.output_queries = nn.Embedding(10, output_head_dim) # 9 actions + 1 value
-        self.output_attention = nn.MultiheadAttention(
-            embed_dim=output_head_dim,
-            kdim=embed_dim,
-            vdim=embed_dim,
-            num_heads=num_heads,
-            dropout=dropout,
-            batch_first=True
-        )
-        self.output_mlp = nn.Sequential(
-            nn.Linear(output_head_dim, 4*output_head_dim),
-            self.activation,
-            nn.Linear(4*output_head_dim, 1)
-        )
+            
+        # Policy and value heads
+        self.policy_head = nn.Linear(embed_dim, 1)
+        self.value_head = nn.Linear(9*embed_dim, 1)
 
     def forward(self, x):
         """
@@ -106,24 +93,18 @@ class TicTacToeTransformer(nn.Module):
             x = transformer(x)       # (batch_size, 9, embed_dim)
         
         # Apply final layer norm
-        x = self.norm(x)
         x = self.activation(x)
-        
-        # Policy head outputs one logit per position
-        output_queries = self.output_queries(torch.arange(10, device=x.device).unsqueeze(0))  # (1, 10, output_head_dim)
-        output_queries = output_queries.expand(x.shape[0], -1, -1)  # (batch_size, 10, output_head_dim)
-        output_attn_output, _ = self.output_attention(
-            query=output_queries,
-            key=x,
-            value=x
-        ) # (batch_size, 10, output_head_dim)
-        output = self.output_mlp(output_attn_output).squeeze(-1) # (batch_size, 10)
+        x = self.norm(x)
 
-        policy = output[:, :9] # (batch_size, 9)
-        value = output[:, 9] # (batch_size)
-        value = torch.tanh(value)  # (batch_size)
-        
+        # Policy head
+        policy_logits = self.policy_head(x).squeeze(-1) # (batch_size, 9)
+
+        # Value head
+        x = einops.rearrange(x, 'b l i -> b (l i)')
+        x = self.value_head(x).squeeze(-1) # (batch_size,)
+        value = torch.tanh(x) # (batch_size,)
+
         return {
-            "policy": policy,
+            "policy": policy_logits,
             "value": value
         }

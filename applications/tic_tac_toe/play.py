@@ -2,9 +2,9 @@ from typing import Tuple, Optional
 from core import Agent, ModelInterface
 from core.implementations import AlphaZero, AlphaZeroModelAgent, AlphaZeroConfig, MCTS, Minimax, RandomAgent
 from applications.tic_tac_toe.game_state import TicTacToeState
-from applications.tic_tac_toe.mlp_model import TicTacToeMLP
-from applications.tic_tac_toe.transformer_model import TicTacToeTransformer
-from applications.tic_tac_toe.experimental_transformer import TicTacToeExperimentalTransformer
+from applications.tic_tac_toe.models.mlp_model import TicTacToeMLP
+from applications.tic_tac_toe.models.transformer_model import TicTacToeTransformer
+from applications.tic_tac_toe.models.experimental_transformer import TicTacToeExperimentalTransformer
 from applications.tic_tac_toe.tensor_mapping import MLPTensorMapping, TokenizedTensorMapping
 
 def print_board(state: TicTacToeState) -> None:
@@ -64,15 +64,15 @@ def create_agent(
         # Setup model
         match model_type:
             case 'mlp':
-                model_name = 'mlp_model'
+                model_name = 'tic_tac_toe_mlp_model_best'
                 model_architecture = TicTacToeMLP
                 model_tensor_mapping = MLPTensorMapping()
             case 'transformer':
-                model_name = 'transformer_model'
+                model_name = 'tic_tac_toe_transformer_model_best'
                 model_architecture = TicTacToeTransformer
                 model_tensor_mapping = TokenizedTensorMapping()
             case 'experimental_transformer':
-                model_name = 'experimental_transformer_model'
+                model_name = 'tic_tac_toe_experimental_transformer_model_best'
                 model_architecture = TicTacToeExperimentalTransformer
                 model_tensor_mapping = TokenizedTensorMapping()
             case _:
