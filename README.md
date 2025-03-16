@@ -21,4 +21,8 @@ PYTHONPATH=$PYTHONPATH:. python applications/tic_tac_toe/train.py --model transf
 
 The `--wandb` argument enables logging of various metrics, the model, and replay buffer. The `--resume_id` argument means that training will resume a previous training run (in this case with id `1q109a9s`).
 
+### Interpretability
+
 ![Attention mask](applications/tic_tac_toe/plots/tic_tac_toe_attn_mask.png)
+
+![Head 1 attention pattern](applications/tic_tac_toe/plots/tic_tac_toe_head_1.png)
