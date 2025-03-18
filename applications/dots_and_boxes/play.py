@@ -4,7 +4,7 @@ from core.implementations.AlphaZero import AlphaZero, AlphaZeroModelAgent
 from core.agent import RandomAgent
 from applications.dots_and_boxes.game_state import *
 from applications.dots_and_boxes.NNmodels.SimpleMLP import DotsAndBoxesMLPInterface
-#from applications.dots_and_boxes.NNmodels.transformer import DotsAndBoxesTransformerInterface
+from applications.dots_and_boxes.NNmodels.transformer import DotsAndBoxesTransformerInterface
 import torch
 import os
 

@@ -11,9 +11,10 @@ from math import copysign
 
 
 class SimpleMLP(nn.Module):
-    def __init__(self, hidden_size: int=64, device: t.device = t.device('cpu')):
+    def __init__(self, hidden_size: int = 64, device: t.device = t.device('cpu')):
         super().__init__()
         self._device = device
+        self.hidden_size = hidden_size
 
         self.first_linear = nn.Linear(2*MAX_SIZE*(MAX_SIZE+1), hidden_size)
         self.relu = nn.ReLU()
@@ -35,8 +36,12 @@ class SimpleMLP(nn.Module):
 
         # Apply the mask: set the policy probabilities of illegal moves to a very low value
         if mask is not None:
-            policy_logits = policy_logits + (mask * -1e10)  #Apply a large negative value to illegal moves     
+            policy_logits = policy_logits + (mask * -100)  #Apply a large negative value to illegal moves     
         
+        #for numerical stability of the policy logits
+        max_logits = t.max(policy_logits)  # Find the maximum logit
+        policy_logits = policy_logits - max_logits
+
         # Value output (scalar)
         value = t.tanh(self.value_head(x))
 
@@ -55,8 +60,8 @@ class SimpleMLP(nn.Module):
     
 
 class DotsAndBoxesMLPInterface(DotsAndBoxesBaseModelInterface):
-    def __init__(self, device: t.device = t.device('cpu')):
-        self.model = SimpleMLP(device=device)
+    def __init__(self, hidden_size: int = 64, device: t.device = t.device('cpu')):
+        self.model = SimpleMLP(hidden_size=hidden_size, device=device)
         # Initialize weights with small random values
         for param in self.model.parameters():
             nn.init.normal_(param, mean=0.0, std=0.02)

@@ -11,8 +11,8 @@ def random_self_play(num_games=10):
     game_data = []  # This will hold the states, actions, and outcomes
     
     for _ in range(num_games):
-        game = GameState()
-        board_state = simpleEncode(GameState()) 
+        game = DotsAndBoxesGameState()
+        board_state = simpleEncode(DotsAndBoxesGameState()) 
         done = False
         episode_data = []
         
