@@ -48,5 +48,4 @@ class SimpleMLP(nn.Module):
 
         file_name = os.path.join(model_folder_path, file_name)
         t.save(self.state_dict(), file_name)
-    
 
