@@ -50,18 +50,3 @@ class SimpleMLP(nn.Module):
         t.save(self.state_dict(), file_name)
     
 
-class DotsAndBoxesMLPInterface(DotsAndBoxesBaseModelInterface):
-    def __init__(self, hidden_size: int = 64, device: t.device = t.device('cpu')):
-        self.model = SimpleMLP(hidden_size=hidden_size, device=device)
-        # Initialize weights with small random values
-        for param in self.model.parameters():
-            nn.init.normal_(param, mean=0.0, std=0.02)
-        self.model.eval()  # Set to evaluation mode
-    
-    def encode_state(self, state: DotsAndBoxesGameState) -> t.Tensor:
-        """Convert board state to neural network input tensor."""
-
-        encoded_board = simpleEncode(state)
-        encoded_board = encoded_board.to(device=self.model._device)
-        return encoded_board.flatten()
-

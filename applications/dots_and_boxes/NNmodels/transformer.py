@@ -3,8 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Dict, Tuple
 from game_state import *
-from applications.dots_and_boxes.NNmodels.model import DotsAndBoxesBaseModelInterface
-from encoder import simpleEncode
 from torchtyping import TensorType
 import os
 from math import copysign
@@ -117,38 +115,3 @@ class DotsAndBoxesTransformer(nn.Module):
             "policy": policy,
             "value": value
         }
-
-
-class DotsAndBoxesTransformerInterface(DotsAndBoxesBaseModelInterface):
-    def __init__(
-        self, 
-        device: torch.device,
-        attention_layers: int = 2,
-        embed_dim: int = 9,
-        num_heads: int = 3,
-        feedforward_dim: int = 27,
-        dropout: float = 0.1,
-        norm_first: bool = True,
-        activation: str = 'relu'
-    ):
-        self.model = DotsAndBoxesTransformer(
-            attention_layers=attention_layers,
-            embed_dim=embed_dim,
-            num_heads=num_heads,
-            feedforward_dim=feedforward_dim,
-            dropout=dropout,
-            norm_first=norm_first,
-            activation=activation
-        )
-        self.model.to(device)
-        self.model.eval()  # Set to evaluation mode
-    
-    def encode_state(self, state: DotsAndBoxesGameState) -> torch.Tensor:
-        """Convert board state to neural network input tensor."""
-        # Create tensor of board state indices (0=empty, 1=drawn)
-        device = next(self.model.parameters()).device
-        encoded_board = simpleEncode(state)
-        encoded_board = encoded_board.to(device=device)
-        return encoded_board.flatten()
-
-        
