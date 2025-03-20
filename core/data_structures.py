@@ -10,7 +10,7 @@ import os
 @dataclass
 class TrainingExample(Generic[ActionType, TargetType]):
     """A single training example from self-play."""
-    state: State[ActionType]
+    state: State[ActionType, Any]
     target: TargetType
     data: Dict[str, Any] = field(default_factory=dict)
 

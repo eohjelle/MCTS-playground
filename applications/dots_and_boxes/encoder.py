@@ -18,42 +18,31 @@ class DABBaseTensorMapping(TensorMapping[DotsAndBoxesAction, AlphaZeroTarget]):
         policy_logits = output["policy"]
         value = output["value"]
 
-        #TODO: masking here or inside the model? 
-        '''
-        # Get legal actions from the current state
-        legal_actions = state.get_legal_actions()
-        
-        
-        # Create a mask for legal moves (negative infinity for illegal moves)
-        mask = torch.full_like(policy_logits, float('-inf'))
-        for row in range(3):
-            for col in range(3):
-                if (row, col) in legal_actions:
-                    idx = row * 3 + col
-                    mask[idx] = 0.0
-        
-        # Apply mask and convert to probabilities
-        masked_logits = policy_logits + mask'''
         policy_probs = F.softmax(policy_logits, dim=0)
+
+        num_rows, num_cols = state.rows, state.cols
+
         
         # Convert to action->probability dictionary
         policy_dict = {}
-        for idx in range(2*MAX_SIZE*(MAX_SIZE+1)):  #number of edges in the game
+        legal_actions = state.get_legal_actions()
+        for idx in range(2*num_rows*num_cols+num_rows+num_cols):  #number of edges in the game
             prob = policy_probs[idx].item()  # Convert to float
             # Convert flat index back to (row, col)
-            if idx < MAX_SIZE*(MAX_SIZE+1):
-                row = idx // (MAX_SIZE+1)
+            if idx < num_rows*(num_cols+1): # vertical edge
+                row = idx // (num_cols+1)
                 row = 2*row+1 
-                col = idx % (MAX_SIZE+1)
+                col = idx % (num_cols+1)
                 col = 2*col
-            else:
-                idx_res = idx - MAX_SIZE*(MAX_SIZE+1) 
-                row = idx_res // (MAX_SIZE)
+            else: # horizontal edge
+                idx_res = idx - num_rows*(num_cols+1) 
+                row = idx_res % (num_rows+1)
                 row = 2*row 
-                col = idx_res % (MAX_SIZE)
+                col = idx_res // (num_rows+1)
                 col = 2*col+1
-            policy_dict[(row, col)] = prob
-        
+            if (row, col) in legal_actions:
+                policy_dict[(row, col)] = prob
+        assert set(policy_dict.keys()) == set(legal_actions), "Policy dictionary keys do not match legal actions"
         return policy_dict, float(value.item())  # Convert value to float
     
     @staticmethod
@@ -68,36 +57,38 @@ class DABBaseTensorMapping(TensorMapping[DotsAndBoxesAction, AlphaZeroTarget]):
             data is a dictionary of auxiliary tensors
         """
         policy_dict, value = example.target
+
+        num_rows, num_cols = example.state.rows, example.state.cols # type: ignore
         
         # Convert policy dict to tensor
-        policy = t.zeros(2*MAX_SIZE*(MAX_SIZE+1), device=device)
+        policy = t.zeros(2*num_rows*num_cols+num_rows+num_cols, device=device)
         for (row, col), prob in policy_dict.items():
-            if col%2==1:
-                idx = row//2 * (MAX_SIZE+1) + col//2 
-            else:
-                idx = row//2 *(MAX_SIZE) + col//2
-                idx += MAX_SIZE*(MAX_SIZE+1)  
+            if col%2==0: # vertical edge
+                idx = row//2 * (num_cols+1) + col//2
+            else: # horizontal edge
+                idx = col//2 * (num_rows+1) + row//2
+                idx += num_rows*(num_cols+1)  
             policy[idx] = prob
         
         # Convert legal actions to a tensor mask if available
-        legal_actions_data = {}
+        data = {}
         if "legal_actions" in example.data:
             legal_actions_list = example.data["legal_actions"]
-            legal_actions = t.zeros(2*MAX_SIZE*(MAX_SIZE+1), device=device)
-            for action in legal_actions_list: #TODO: check if this is correct
+            legal_actions = t.zeros(2*num_rows*num_cols+num_rows+num_cols, device=device)
+            for action in legal_actions_list:
                 row, col = action
-                if col%2==1:
-                    idx = row//2 * (MAX_SIZE+1) + col//2 
-                else:
-                    idx = row//2 *(MAX_SIZE) + col//2
-                    idx += MAX_SIZE*(MAX_SIZE+1)
-                legal_actions[idx] = 1
-            legal_actions_data["legal_actions"] = legal_actions
+                if col%2==0: # vertical edge
+                    idx = row//2 * (num_cols+1) + col//2 
+                else: # horizontal edge
+                    idx = col//2 * (num_rows+1) + row//2
+                    idx += num_rows*(num_cols+1)
+                legal_actions[idx] = 1.0
+            data["legal_actions"] = legal_actions
         
         return {
             "policy": policy,
-            "value": t.tensor([value], device=device)
-        }, legal_actions_data
+            "value": t.tensor(value, device=device, dtype=t.float32)
+        }, data
     
 class DABSimpleTensorMapping(DABBaseTensorMapping):
     @staticmethod
@@ -110,15 +101,15 @@ class DABSimpleTensorMapping(DABBaseTensorMapping):
         board = state.board
         #Process VERTICALS
         VerticalEdges = board[1::2, ::2]
-        res_top = np.where(VerticalEdges == VERTICAL, 1, 0)
+        res_top = np.where(VerticalEdges == VERTICAL, 1, 0).flatten()
         #Process HORIZONTALS
         HorizontalEdges = board[::2, 1::2]
-        res_bottom = np.transpose(np.where(HorizontalEdges == HORIZONTAL, 1, 0))
+        res_bottom = np.transpose(np.where(HorizontalEdges == HORIZONTAL, 1, 0)).flatten()
         #Concatenate
         result = np.concatenate((res_top, res_bottom), axis = 0)
         encoded_board = t.from_numpy(result)
         encoded_board = encoded_board.to(device=device)
-        return encoded_board.flatten()
+        return encoded_board
 
 class DABMultiLayerTensorMapping(DABBaseTensorMapping):
     @staticmethod

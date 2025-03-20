@@ -1,15 +1,18 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict, Tuple
-from game_state import *
+from typing import Dict, Tuple, TypedDict
+from applications.dots_and_boxes.game_state import *
 from torchtyping import TensorType
 import os
 from math import copysign
 
-
-N_edges = 2*MAX_SIZE*(MAX_SIZE+1)
-
+class TransformerInitParams(TypedDict):
+    num_rows: int
+    num_cols: int
+    attention_layers: int
+    embed_dim: int
+    num_heads: int
 
 class DotsAndBoxesTransformer(nn.Module):
     """
@@ -17,7 +20,9 @@ class DotsAndBoxesTransformer(nn.Module):
     Uses a shared transformer encoder backbone followed by separate policy and value heads.
     """
     def __init__(
-            self, 
+            self,
+            num_rows: int,
+            num_cols: int,
             attention_layers: int,
             embed_dim: int,
             num_heads: int,
@@ -38,6 +43,8 @@ class DotsAndBoxesTransformer(nn.Module):
         super().__init__()
         # Embed each edge's state (available/drawn) into a learned embedding
         self.input_embedding = nn.Embedding(2, embed_dim)
+
+        N_edges = 2*num_rows*num_cols+num_rows+num_cols
         
         # Add learned positional embeddings
         self.pos_embedding = nn.Embedding(N_edges, embed_dim)

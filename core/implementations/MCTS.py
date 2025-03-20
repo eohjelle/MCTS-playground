@@ -3,20 +3,21 @@ import random
 import math
 from typing import Dict, List, Optional, Tuple, Generic
 from core.tree_search import ActionType, State, Node, TreeSearch
+from core.types import PlayerType
 
 @dataclass
-class MCTSValue:
+class MCTSValue[PlayerType]:
+    player: PlayerType  # The player at this node
     visit_count: int = 0  # Number of times this node has been visited
     total_value: float = 0.0  # Sum of values from all visits
-    player: int = 1  # The player at this node
     
     @property
     def mean_value(self) -> float:
         # Return value from this player's perspective
         return self.total_value / max(1, self.visit_count)
 
-class MCTS(TreeSearch[ActionType, MCTSValue, Tuple[MCTSValue, float]], Generic[ActionType]):
-    def __init__(self, initial_state: State[ActionType], num_simulations: int, exploration_constant: float = 1.414):
+class MCTS(TreeSearch[ActionType, MCTSValue, Tuple[MCTSValue, float], PlayerType], Generic[ActionType, PlayerType]):
+    def __init__(self, initial_state: State[ActionType, PlayerType], num_simulations: int, exploration_constant: float = 1.414):
         self.root = Node(
             initial_state,
             value=MCTSValue(
@@ -27,10 +28,11 @@ class MCTS(TreeSearch[ActionType, MCTSValue, Tuple[MCTSValue, float]], Generic[A
         )
         self._exploration_constant = exploration_constant
         self.num_simulations = num_simulations
+        self.state_dict = {initial_state: self.root}
     
-    def select(self, node: Node[ActionType, MCTSValue]) -> ActionType:
+    def select(self, node: Node[ActionType, MCTSValue, PlayerType]) -> ActionType:
         """Select an action using UCT."""
-        def uct_score(action_node: Tuple[ActionType, Node[ActionType, MCTSValue]]) -> float:
+        def uct_score(action_node: Tuple[ActionType, Node[ActionType, MCTSValue, PlayerType]]) -> float:
             action, child = action_node
             if child.value is None or node.value is None:
                 return float('inf')
@@ -43,7 +45,7 @@ class MCTS(TreeSearch[ActionType, MCTSValue, Tuple[MCTSValue, float]], Generic[A
         
         return max(node.children.items(), key=uct_score)[0]
     
-    def evaluate(self, node: Node[ActionType, MCTSValue]) -> Tuple[MCTSValue, float]:
+    def evaluate(self, node: Node[ActionType, MCTSValue, PlayerType]) -> Tuple[MCTSValue, float]:
         """Evaluate a state using random rollouts."""
         perspective_player = node.state.current_player
 
@@ -60,7 +62,7 @@ class MCTS(TreeSearch[ActionType, MCTSValue, Tuple[MCTSValue, float]], Generic[A
         node_value = MCTSValue(player=perspective_player)
         return node_value, reward
     
-    def update(self, node: Node[ActionType, MCTSValue], action: Optional[ActionType], evaluation: Tuple[MCTSValue, float]) -> None:
+    def update(self, node: Node[ActionType, MCTSValue, PlayerType], action: Optional[ActionType], evaluation: Tuple[MCTSValue, float]) -> None:
         """Update a node's value by accumulating visit counts and rewards."""
         # Initialize node value if needed
         if node.value is None:
@@ -73,9 +75,9 @@ class MCTS(TreeSearch[ActionType, MCTSValue, Tuple[MCTSValue, float]], Generic[A
         else:
             node.value.total_value -= evaluation[1]
     
-    def policy(self, node: Node[ActionType, MCTSValue]) -> ActionType:
+    def policy(self, node: Node[ActionType, MCTSValue, PlayerType]) -> ActionType:
         """Select the most visited action."""
-        def visit_count(action_node: Tuple[ActionType, Node[ActionType, MCTSValue]]) -> int:
+        def visit_count(action_node: Tuple[ActionType, Node[ActionType, MCTSValue, PlayerType]]) -> int:
             value = action_node[1].value
             return 0 if value is None else value.visit_count
         

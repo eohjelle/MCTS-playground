@@ -1,4 +1,4 @@
-from typing import Dict, Callable
+from typing import Dict, Callable, Any
 from core.tree_search import State
 from core.types import ActionType, ValueType
 from core.agent import Agent
@@ -6,7 +6,7 @@ from core.agent import Agent
 def benchmark(
     create_agent: Callable[[State], Agent[ActionType]],
     create_opponents: Dict[str, Callable[[State], Agent[ActionType]]],
-    initial_state: Callable[[], State[ActionType]],
+    initial_state: Callable[[], State[ActionType, Any]],
     num_games: int = 20,
 ) -> Dict[str, Dict[str, float]]:
     """Benchmark two agent creation functions against each other.

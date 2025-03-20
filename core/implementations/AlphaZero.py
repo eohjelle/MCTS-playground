@@ -6,17 +6,17 @@ import torch.nn.functional as F
 import numpy as np
 from core.tree_search import State, Node, TreeSearch
 from core.trainer import TreeSearchTrainer, TrainingExample, ReplayBuffer
-from core.types import ActionType
+from core.types import ActionType, PlayerType
 from core.agent import Agent
 from core.model_interface import ModelInterface, TensorMapping
 import random
 
 @dataclass
-class AlphaZeroValue:
+class AlphaZeroValue[PlayerType]:
+    player: PlayerType  # The player at this node
     visit_count: int = 0  # Number of times this node has been visited
     total_value: float = 0.0  # Sum of values from all visits
     prior_probability: float = 0.0  # Prior probability from neural network
-    player: int = 1  # The player at this node
     
     @property
     def mean_value(self) -> float:
@@ -25,7 +25,7 @@ class AlphaZeroValue:
 
 # Type aliases for game-specific formats
 AlphaZeroTarget = Tuple[Dict[ActionType, float], float]  # (policy probabilities, value)
-AlphaZeroEvaluation = Tuple[Dict[ActionType, float], float, int]  # (policy probabilities, value, player)
+AlphaZeroEvaluation = Tuple[Dict[ActionType, float], float, PlayerType]  # (policy probabilities, value, player)
 
 class AlphaZeroConfig(TypedDict):
     exploration_constant: float
@@ -33,22 +33,23 @@ class AlphaZeroConfig(TypedDict):
     dirichlet_epsilon: float
     temperature: float
 
-class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation], Generic[ActionType]):
+class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation, PlayerType], Generic[ActionType, PlayerType]):
     """AlphaZero tree search implementation.
     
     Type parameters:
         ActionType: Type of actions in the game (e.g. tuple of coordinates)
+        PlayerType: Type of players in the game
     
     The tree search uses:
         - AlphaZeroValue to store node statistics (visit counts, values, priors)
         - AlphaZeroEvaluation as evaluation type:
             - Dict[ActionType, float]: Policy (action -> probability mapping)
             - float: Value estimate
-            - int: Player perspective for the value
+            - PlayerType: Player perspective for the value
     """
     def __init__(
         self, 
-        initial_state: State[ActionType],
+        initial_state: State[ActionType, PlayerType],
         num_simulations: int,
         model: ModelInterface,
         tensor_mapping: TensorMapping[ActionType, AlphaZeroTarget],
@@ -83,8 +84,8 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation], Gen
         self._dirichlet_alpha = params.get("dirichlet_alpha", 0.3)
         self._dirichlet_epsilon = params.get("dirichlet_epsilon", 0.25)
         self._temperature = params.get("temperature", 0.9)
-    
-    def _set_prior_probabilities(self, node: Node[ActionType, AlphaZeroValue], policy: Dict[ActionType, float]) -> None:
+        self.state_dict = {initial_state: self.root}
+    def _set_prior_probabilities(self, node: Node[ActionType, AlphaZeroValue, PlayerType], policy: Dict[ActionType, float]) -> None:
         """Set prior probabilities for node's children.
         
         Args:
@@ -112,7 +113,7 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation], Gen
                 player=child.state.current_player
             )
     
-    def evaluate(self, node: Node[ActionType, AlphaZeroValue]) -> AlphaZeroEvaluation:
+    def evaluate(self, node: Node[ActionType, AlphaZeroValue, PlayerType]) -> AlphaZeroEvaluation:
         """Evaluate a leaf node's state."""
         if node.state.is_terminal():
             return {}, node.state.get_reward(node.state.current_player), node.state.current_player
@@ -122,9 +123,9 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation], Gen
         
         return policy, value, node.state.current_player
     
-    def select(self, node: Node[ActionType, AlphaZeroValue]) -> ActionType:
+    def select(self, node: Node[ActionType, AlphaZeroValue, PlayerType]) -> ActionType:
         """Select an action using PUCT formula."""
-        def puct_score(action_node: Tuple[ActionType, Node[ActionType, AlphaZeroValue]]) -> float:
+        def puct_score(action_node: Tuple[ActionType, Node[ActionType, AlphaZeroValue, PlayerType]]) -> float:
             action, child = action_node
             if child.value is None or node.value is None:
                 return float('-inf')
@@ -142,7 +143,7 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation], Gen
         
         return max(node.children.items(), key=puct_score)[0]
     
-    def update(self, node: Node[ActionType, AlphaZeroValue], action: Optional[ActionType], evaluation: AlphaZeroEvaluation) -> None:
+    def update(self, node: Node[ActionType, AlphaZeroValue, PlayerType], action: Optional[ActionType], evaluation: AlphaZeroEvaluation) -> None:
         """Update a node's statistics."""
         policy, Qvalue, leaf_player = evaluation
 
@@ -158,13 +159,8 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation], Gen
         else:
             node.value.total_value -= Qvalue
     
-    def policy(self, node: Node[ActionType, AlphaZeroValue]) -> ActionType:
-        """Select an action at root based on visit counts and temperature.
-        
-        At temperature = 0, selects the most visited action.
-        At temperature = 1, selects proportionally to visit counts.
-        At temperature = inf, selects uniformly at random.
-        """
+    def policy(self, node: Node[ActionType, AlphaZeroValue, PlayerType]) -> ActionType:
+        """Select an action at root based on visit counts and temperature."""
         visits = {action: child.value.visit_count if child.value else 0
                  for action, child in node.children.items()}
         
@@ -217,7 +213,7 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTa
         self.mask_illegal_moves = mask_illegal_moves
         self.mask_value = mask_value
 
-    def create_tree_search(self, state: State[ActionType], num_simulations: int, params: AlphaZeroConfig) -> TreeSearch:
+    def create_tree_search(self, state: State[ActionType, PlayerType], num_simulations: int, params: AlphaZeroConfig) -> TreeSearch:
         """Create an AlphaZero instance for the given state.
         
         Args:
@@ -235,7 +231,7 @@ class AlphaZeroTrainer(TreeSearchTrainer[ActionType, AlphaZeroValue, AlphaZeroTa
     
     def extract_examples(
         self,
-        game: List[Tuple[Node[ActionType, AlphaZeroValue], ActionType]]
+        game: List[Tuple[Node[ActionType, AlphaZeroValue, PlayerType], ActionType]]
     ) -> List[TrainingExample[ActionType, AlphaZeroTarget]]:
         """Create training examples from game history.
         
@@ -323,12 +319,12 @@ class AlphaZeroModelAgent(Agent[ActionType]):
     """Agent that uses a model (no tree search) to select actions."""
     def __init__(
             self, 
-            initial_state: State[ActionType], 
+            initial_state: State[ActionType, PlayerType], 
             model: ModelInterface,
             tensor_mapping: TensorMapping[ActionType, AlphaZeroTarget],
             temperature: float = 0.0
         ):
-        self.root = Node[ActionType, AlphaZeroValue](
+        self.root = Node[ActionType, AlphaZeroValue, PlayerType](
             state=initial_state,
             value=AlphaZeroValue(
                 visit_count=0,
@@ -340,6 +336,7 @@ class AlphaZeroModelAgent(Agent[ActionType]):
         self.model = model
         self.tensor_mapping = tensor_mapping
         self.temperature = temperature
+        self.state_dict = {initial_state: self.root}
 
     def __call__(self) -> ActionType:
         policy, _ = self.model.predict(self.tensor_mapping, self.root.state)  # Access the state inside the node

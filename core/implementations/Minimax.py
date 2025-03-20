@@ -2,7 +2,7 @@ from core.agent import Agent
 from core.state import State
 from core.tree_search import Node
 from dataclasses import dataclass, field
-from typing import Generic, List
+from typing import Generic, List, Any
 from core.types import ActionType, PlayerType
 import random
 
@@ -19,16 +19,17 @@ class Minimax(Agent[ActionType], Generic[ActionType]):
 
     Currently no max depth, so only viable for small games like TicTacToe.
     """
-    def __init__(self, initial_state: State[ActionType]):
-        self.root = Node[ActionType, MinimaxValue](initial_state)
+    def __init__(self, initial_state: State[ActionType, Any]):
+        self.root = Node[ActionType, MinimaxValue, Any](initial_state)
+        self.state_dict = {initial_state: self.root}
 
-    def evaluate(self, node: Node[ActionType, MinimaxValue]) -> MinimaxValue:
+    def evaluate(self, node: Node[ActionType, MinimaxValue, Any]) -> MinimaxValue:
         if node.value is not None: # already evaluated
             return node.value
         if node.state.is_terminal():
             value = MinimaxValue(value=node.state.get_reward(node.state.current_player), best_actions=[], player=node.state.current_player)
         else:
-            node.expand()
+            node.expand(state_dict=self.state_dict)
             max_value = float('-inf')
             best_actions = []
             for action, child in node.children.items():
@@ -47,5 +48,3 @@ class Minimax(Agent[ActionType], Generic[ActionType]):
         assert self.root.value is not None, "Root value is None"
         assert len(self.root.value.best_actions) > 0, "Best actions are empty"
         return random.choice(self.root.value.best_actions)
-
-    

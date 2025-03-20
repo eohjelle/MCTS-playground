@@ -19,7 +19,7 @@ class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType, TreeSearchPa
     replay_buffer: ReplayBuffer
     
 
-    def create_tree_search(self, state: State[ActionType], num_simulations: int, params: TreeSearchParams) -> TreeSearch:
+    def create_tree_search(self, state: State[ActionType, Any], num_simulations: int, params: TreeSearchParams) -> TreeSearch:
         """Create a tree search instance for the given state.
         
         Args:
@@ -29,7 +29,7 @@ class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType, TreeSearchPa
         """
         ...
     
-    def extract_examples(self, game: List[Tuple[Node[ActionType, ValueType], ActionType]]) -> List[TrainingExample[ActionType, TargetType]]:
+    def extract_examples(self, game: List[Tuple[Node[ActionType, ValueType, Any], ActionType]]) -> List[TrainingExample[ActionType, TargetType]]:
         """Create training examples from a game.
         
         Args:
@@ -62,10 +62,10 @@ class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType, TreeSearchPa
     
     def self_play_game(
         self,
-        initial_state: Callable[[], State[ActionType]],
+        initial_state: Callable[[], State[ActionType, Any]],
         num_simulations: int,
         **params
-    ) -> List[Tuple[Node[ActionType, ValueType], ActionType]]:
+    ) -> List[Tuple[Node[ActionType, ValueType, Any], ActionType]]:
         """Play a complete game, recording nodes and actions.
         
         Args:
@@ -108,7 +108,7 @@ class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType, TreeSearchPa
     def train(
         self,
         *,
-        initial_state: Callable[[], State[ActionType]],
+        initial_state: Callable[[], State[ActionType, Any]],
         tree_search_params: TreeSearchParams,
         optimizer: torch.optim.Optimizer,
         num_iterations: int,

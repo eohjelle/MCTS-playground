@@ -5,6 +5,8 @@ from core.implementations import AlphaZeroTrainer, AlphaZeroConfig, MCTS, Random
 from applications.tic_tac_toe.models.mlp_model import MLPInitParams, TicTacToeMLP  
 from applications.tic_tac_toe.models.transformer_model import TransformerInitParams, TicTacToeTransformer
 from applications.tic_tac_toe.models.experimental_transformer import ExperimentalTransformerInitParams, TicTacToeExperimentalTransformer
+from applications.tic_tac_toe.models.dynamic_mask_experimental_transformer import DynamicMaskExperimentalTransformerInitParams, DynamicMaskExperimentalTransformer
+from applications.tic_tac_toe.models.linear_attention_transformer import LinearAttentionTransformer
 from applications.tic_tac_toe.game_state import TicTacToeState
 from applications.tic_tac_toe.tensor_mapping import MLPTensorMapping, TokenizedTensorMapping
 from wandb.sdk.wandb_run import Run
@@ -24,7 +26,7 @@ def train(
     lr_scheduler_type: Literal['plateau'],
     lr_scheduler_params: Dict[str, Any],
     training_method: Literal['self_play', 'supervised'],
-    model_type: Literal['mlp', 'transformer', 'experimental_transformer'],
+    model_type: Literal['mlp', 'transformer', 'experimental_transformer', 'dynamic_mask_experimental_transformer'],
     model_params: Dict[str, Any],
     device: torch.device,
     model_name: str | None = None,
@@ -48,6 +50,12 @@ def train(
             model_tensor_mapping = TokenizedTensorMapping()
         case 'experimental_transformer':
             model_architecture = TicTacToeExperimentalTransformer
+            model_tensor_mapping = TokenizedTensorMapping()
+        case 'dynamic_mask_experimental_transformer':
+            model_architecture = DynamicMaskExperimentalTransformer
+            model_tensor_mapping = TokenizedTensorMapping()
+        case 'linear_attention_transformer':
+            model_architecture = LinearAttentionTransformer
             model_tensor_mapping = TokenizedTensorMapping()
         case _:
             raise ValueError(f"Invalid model type: {model_type}")

@@ -2,10 +2,11 @@ import torch
 import argparse
 from core import ModelInterface, ReplayBuffer, supervised_training_loop
 from core.implementations import AlphaZeroTrainer, AlphaZeroConfig, MCTS, RandomAgent, Minimax
-from applications.dots_and_boxes.NNmodels.SimpleMLP import MLPInitParams, DotsAndBoxesMLP  
+from applications.dots_and_boxes.NNmodels.SimpleMLP import SimpleMLPInitParams, SimpleMLP  
 from applications.dots_and_boxes.NNmodels.transformer import TransformerInitParams, DotsAndBoxesTransformer
-from applications.dots_and_boxes.game_state import DotsAndBoxesState
-#from applications.dots_and_boxes.tensor_mapping import MLPTensorMapping, TokenizedTensorMapping
+from applications.dots_and_boxes.NNmodels.MLP import MLPInitParams, MLP
+from applications.dots_and_boxes.game_state import DotsAndBoxesGameState
+from applications.dots_and_boxes.encoder import DABSimpleTensorMapping, DABMultiLayerTensorMapping
 from wandb.sdk.wandb_run import Run
 import wandb
 from typing import Dict, Any, Literal
@@ -39,12 +40,15 @@ def train(
     # Initialize model interface and tensor mapping
     model_name = model_name or f"{model_type}_model"
     match model_type:
-        case 'mlp':
+        case 'simple_mlp':
             model_architecture = SimpleMLP
-            model_tensor_mapping = MLPTensorMapping()
+            model_tensor_mapping = DABSimpleTensorMapping()
         case 'transformer':
             model_architecture = DotsAndBoxesTransformer
-            model_tensor_mapping = TokenizedTensorMapping()
+            model_tensor_mapping = DABSimpleTensorMapping()
+        case 'mlp':
+            model_architecture = MLP
+            model_tensor_mapping = DABSimpleTensorMapping()
         case _:
             raise ValueError(f"Invalid model type: {model_type}")
     
@@ -132,7 +136,7 @@ def train(
 
     # Initialize agents to evaluate against
     ## Create minimax agent and expand the game tree, this will be used for evaluation later on
-    state = DotsAndBoxesState()
+    state = DotsAndBoxesGameState()
     minimax_agent = Minimax(state)
     minimax_agent_root = minimax_agent.root
     minimax_agent()
@@ -147,7 +151,7 @@ def train(
     opponents = {
         'Minimax': lambda state: minimax_agent_factory(),
         'RandomAgent': lambda state: RandomAgent(state),
-        'MCTS': lambda state: MCTS(state, num_simulations=100)
+        # 'MCTS': lambda state: MCTS(state, num_simulations=100)
     }
 
     # Train based on training method
@@ -163,7 +167,7 @@ def train(
 
             # Train
             trainer.train(
-                initial_state=lambda: DotsAndBoxesState(),
+                initial_state=lambda: DotsAndBoxesGameState(),
                 evaluate_against_agents=opponents,
                 optimizer=optimizer,
                 wandb_run=wandb_run,
@@ -184,7 +188,7 @@ def train(
                 model_interface=model_interface,
                 tensor_mapping=model_tensor_mapping,
                 buffer=replay_buffer,
-                initial_state=lambda: DotsAndBoxesState(),
+                initial_state=lambda: DotsAndBoxesGameState(),
                 evaluate_against_agents=opponents,
                 optimizer=optimizer,
                 lr_scheduler=lr_scheduler,

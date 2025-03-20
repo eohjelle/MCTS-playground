@@ -1,8 +1,11 @@
 import torch as t
 import torch.nn as nn
-from typing import Dict
-from game_state import *
+from typing import Dict, TypedDict
+from applications.dots_and_boxes.game_state import *
 import os
+
+class SimpleMLPInitParams(TypedDict):
+    hidden_size: int
 
 
 class SimpleMLP(nn.Module):

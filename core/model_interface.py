@@ -25,7 +25,7 @@ class ModelInterface(Generic[ModelInitParams]):
         self.model.eval()
         self.init_params = init_params
 
-    def predict(self, tensor_mapping: TensorMapping[ActionType, TargetType], state: State[ActionType]) -> TargetType:
+    def predict(self, tensor_mapping: TensorMapping[ActionType, TargetType], state: State[ActionType, Any]) -> TargetType:
         """Convenience function for single-state inference."""
         # We add the batch dimension before model inference and remove it after.
         device = next(self.model.parameters()).device

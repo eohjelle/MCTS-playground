@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Literal
 from enum import Enum
 from core.tree_search import ActionType, State
 from copy import deepcopy
@@ -50,10 +50,12 @@ def new_board(rows, cols):
                 board[i][j] = EMPTY_EDGE
     return board
 
-DotsAndBoxesAction = Tuple[int, int]
 
-class DotsAndBoxesGameState(State[DotsAndBoxesAction]):
-    def __init__(self, rows=MAX_SIZE, cols=MAX_SIZE, board_state=None, edge_owners = None, player_turn=P1):
+DotsAndBoxesAction = Tuple[int, int]
+PlayerType = Literal[1, -1]
+
+class DotsAndBoxesGameState(State[DotsAndBoxesAction, PlayerType]):
+    def __init__(self, rows=MAX_SIZE, cols=MAX_SIZE, board_state=None, edge_owners = None, player_turn: PlayerType=P1):
         if board_state==None:
             self.board = new_board(rows, cols)
         else:
@@ -197,9 +199,30 @@ class DotsAndBoxesGameState(State[DotsAndBoxesAction]):
             return -1
     
     @property
-    def current_player(self) -> int:
+    def current_player(self) -> PlayerType:
         """Return current player (for example, 1 or -1)."""
-        return self.player_turn
+        return self.player_turn  # type: ignore
+    
+    def __eq__(self, other) -> bool:
+        """For the purpose of creating training data, we only need to check if the available moves are the same."""
+        if not isinstance(other, DotsAndBoxesGameState):
+            return False
+        # # Convert numpy arrays to tuples for comparison
+        # board_tuple = tuple(tuple(row) for row in self.board)
+        # other_board_tuple = tuple(tuple(row) for row in other.board)
+        # return (board_tuple == other_board_tuple and 
+        #         self.player_turn == other.player_turn and
+        #         self.scores == other.scores)
+        return set(self.available_moves_index_list) == set(other.available_moves_index_list)
+
+    def __hash__(self) -> int:
+        """For the purpose of creating training data, we only need to hash the available moves."""
+        # # Convert numpy arrays to tuples for hashing
+        # board_tuple = tuple(tuple(row) for row in self.board)
+        # # Combine with player turn and scores
+        # return hash((board_tuple, self.player_turn, tuple(sorted(self.scores.items()))))
+        return hash(frozenset(self.available_moves_index_list))
+
     
 
 '''

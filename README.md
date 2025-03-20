@@ -1,7 +1,7 @@
 #todo
 
 - [ ] Make TreeSearch and TreeSearchTrainer work with batched operations for parallelizability. Can try to make TreeSearch more integrated with pytorch, to all for playing multiple games in parallel using a sort of queue.
-- [ ] Improve saving and loading of models in ModelInterface, make in compatible with onnx format and wandb
+- [ ] Change methods of TensorMapping to use batched operations.Some implementations are surprisingly slow.
 
 # Examples
 

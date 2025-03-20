@@ -1,10 +1,11 @@
-from typing import List, Tuple, Optional, Self
+from typing import List, Tuple, Optional, Self, Literal
 from core import State
 
 # Define TicTacToeAction as a type alias
 TicTacToeAction = Tuple[int, int]
+TicTacToePlayer = Literal[1,-1]
 
-class TicTacToeState(State[TicTacToeAction]):
+class TicTacToeState(State[TicTacToeAction, TicTacToePlayer]):
     def __init__(self, board: Optional[List[List[str]]] = None, current_player: int = 1):
         """Initialize TicTacToe state.
         
