@@ -17,7 +17,7 @@ class MCTSValue[PlayerType]:
         return self.total_value / max(1, self.visit_count)
 
 class MCTS(TreeSearch[ActionType, MCTSValue, Tuple[MCTSValue, float], PlayerType], Generic[ActionType, PlayerType]):
-    def __init__(self, initial_state: State[ActionType, PlayerType], num_simulations: int, exploration_constant: float = 1.414):
+    def __init__(self, initial_state: State[ActionType, PlayerType], num_simulations: int, num_rollouts: int = 1, exploration_constant: float = 1.414, temperature: float = 0.0):
         self.root = Node(
             initial_state,
             value=MCTSValue(
@@ -29,6 +29,8 @@ class MCTS(TreeSearch[ActionType, MCTSValue, Tuple[MCTSValue, float], PlayerType
         self._exploration_constant = exploration_constant
         self.num_simulations = num_simulations
         self.state_dict = {initial_state: self.root}
+        self.temperature = temperature
+        self.num_rollouts = num_rollouts
     
     def select(self, node: Node[ActionType, MCTSValue, PlayerType]) -> ActionType:
         """Select an action using UCT."""
@@ -54,11 +56,14 @@ class MCTS(TreeSearch[ActionType, MCTSValue, Tuple[MCTSValue, float], PlayerType
 
         # Do a random rollout
         current_state = node.state
-        while not current_state.is_terminal():
-            action = random.choice(current_state.get_legal_actions())
-            current_state = current_state.apply_action(action)
-        
-        reward = current_state.get_reward(perspective_player)
+        total_rewards = 0
+        for _ in range(self.num_rollouts):
+            while not current_state.is_terminal():
+                action = random.choice(current_state.get_legal_actions())
+                current_state = current_state.apply_action(action)
+            total_rewards += current_state.get_reward(perspective_player)
+            current_state = node.state
+        reward = total_rewards / self.num_rollouts
         node_value = MCTSValue(player=perspective_player)
         return node_value, reward
     
@@ -74,11 +79,23 @@ class MCTS(TreeSearch[ActionType, MCTSValue, Tuple[MCTSValue, float], PlayerType
             node.value.total_value += evaluation[1]
         else:
             node.value.total_value -= evaluation[1]
+
+    def full_policy(self, node: Node[ActionType, MCTSValue, PlayerType]) -> Dict[ActionType, float]:
+        """Return the full policy for a node."""
+        def visit_count(node: Node[ActionType, MCTSValue, PlayerType]) -> int:
+            value = node.value
+            return 0 if value is None else value.visit_count
+
+        if self.temperature == 0.0:
+            policy = {action: 0.0 for action in node.children.keys()}
+            most_visited_action = max(node.children.items(), key=lambda x: visit_count(x[1]))[0]
+            policy[most_visited_action] = 1.0
+        else:
+            prepolicy = {action: visit_count(child)**(1/self.temperature) for action, child in node.children.items()}
+            policy = {action: prepolicy[action] / sum(prepolicy.values()) for action in node.children.keys()}
+        return policy
     
     def policy(self, node: Node[ActionType, MCTSValue, PlayerType]) -> ActionType:
         """Select the most visited action."""
-        def visit_count(action_node: Tuple[ActionType, Node[ActionType, MCTSValue, PlayerType]]) -> int:
-            value = action_node[1].value
-            return 0 if value is None else value.visit_count
-        
-        return max(node.children.items(), key=visit_count)[0]
+        actions, probs = zip(*self.full_policy(node).items())
+        return random.choices(actions, weights=probs, k=1)[0]

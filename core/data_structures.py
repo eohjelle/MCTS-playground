@@ -22,6 +22,10 @@ class ReplayBuffer:
     targets: Dict[str, torch.Tensor] = field(default_factory=dict)  # Dict of [buffer_size, ...target_key_shape] tensors
     data: Dict[str, torch.Tensor] = field(default_factory=dict)  # Dict of [buffer_size, ...data_key_shape] tensors
 
+    def __len__(self) -> int:
+        """Return the number of examples in the buffer."""
+        return self.states.shape[0]
+
     def extend(
         self, 
         states: torch.Tensor,

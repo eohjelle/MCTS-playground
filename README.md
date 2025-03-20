@@ -26,3 +26,5 @@ The `--wandb` argument enables logging of various metrics, the model, and replay
 ![Attention mask](applications/tic_tac_toe/plots/tic_tac_toe_attn_mask.png)
 
 ![Head 1 attention pattern](applications/tic_tac_toe/plots/tic_tac_toe_head_1.png)
+
+![Tic tac toe MCTS benchmark](applications/tic_tac_toe/tic_tac_toe_mcts_benchmark.png)

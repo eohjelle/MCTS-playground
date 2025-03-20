@@ -13,6 +13,7 @@ class TransformerInitParams(TypedDict):
     num_cols: int
     attention_layers: int
     embed_dim: int
+    feedforward_dim: int
     num_heads: int
 
 class DotsAndBoxesTransformer(nn.Module):
@@ -28,7 +29,7 @@ class DotsAndBoxesTransformer(nn.Module):
             embed_dim: int,
             num_heads: int,
             feedforward_dim: int,
-            dropout: float,
+            dropout: float = 0.0,
             norm_first: bool = True,
             activation: str = 'relu'
         ):
@@ -66,15 +67,6 @@ class DotsAndBoxesTransformer(nn.Module):
         # Final layer norm
         self.final_norm = nn.LayerNorm(embed_dim)
 
-        # Final activation function
-        match activation:
-            case 'relu':
-                self.final_activation = nn.ReLU()
-            case 'gelu':
-                self.final_activation = nn.GELU()
-            case _:
-                raise ValueError(f"Invalid activation function: {activation}")
-
         # Policy head: maps each position's embedding to a single logit
         self.policy_head = nn.Linear(embed_dim, 1)
 
@@ -102,7 +94,6 @@ class DotsAndBoxesTransformer(nn.Module):
         
         # Apply final layer norm
         x = self.final_norm(x)
-        x = self.final_activation(x)
 
         # Policy head
         policy_logits = self.policy_head(x).squeeze(-1) # (batch_size, 9)
