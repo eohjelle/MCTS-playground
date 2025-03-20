@@ -207,21 +207,19 @@ class DotsAndBoxesGameState(State[DotsAndBoxesAction, PlayerType]):
         """For the purpose of creating training data, we only need to check if the available moves are the same."""
         if not isinstance(other, DotsAndBoxesGameState):
             return False
-        # # Convert numpy arrays to tuples for comparison
-        # board_tuple = tuple(tuple(row) for row in self.board)
-        # other_board_tuple = tuple(tuple(row) for row in other.board)
-        # return (board_tuple == other_board_tuple and 
-        #         self.player_turn == other.player_turn and
-        #         self.scores == other.scores)
-        return set(self.available_moves_index_list) == set(other.available_moves_index_list)
+        # Convert numpy arrays to tuples for comparison
+        board_tuple = tuple(tuple(row) for row in self.board)
+        other_board_tuple = tuple(tuple(row) for row in other.board)
+        return (board_tuple == other_board_tuple and 
+                self.player_turn == other.player_turn and
+                self.scores == other.scores)
 
     def __hash__(self) -> int:
         """For the purpose of creating training data, we only need to hash the available moves."""
-        # # Convert numpy arrays to tuples for hashing
-        # board_tuple = tuple(tuple(row) for row in self.board)
-        # # Combine with player turn and scores
-        # return hash((board_tuple, self.player_turn, tuple(sorted(self.scores.items()))))
-        return hash(frozenset(self.available_moves_index_list))
+        # Convert numpy arrays to tuples for hashing
+        board_tuple = tuple(tuple(row) for row in self.board)
+        # Combine with player turn and scores
+        return hash((board_tuple, self.player_turn, tuple(sorted(self.scores.items()))))
 
     
 

@@ -7,6 +7,28 @@ from core import TensorMapping
 from core.implementations.AlphaZero import AlphaZeroTarget
 from core.data_structures import TrainingExample
 
+def edge_to_idx(row: int, col: int, num_rows: int, num_cols: int) -> int:
+    if col%2==0: # vertical edge
+        idx = row//2 * (num_cols+1) + col//2
+    else: # horizontal edge
+        idx = col//2 * (num_rows+1) + row//2
+        idx += num_rows*(num_cols+1) 
+    return idx
+
+def idx_to_edge(idx: int, num_rows: int, num_cols: int) -> Tuple[int, int]:
+    if idx < num_rows*(num_cols+1): # vertical edge
+        row = idx // (num_cols+1)
+        row = 2*row+1 
+        col = idx % (num_cols+1)
+        col = 2*col
+    else: # horizontal edge
+        idx_res = idx - num_rows*(num_cols+1) 
+        row = idx_res % (num_rows+1)
+        row = 2*row 
+        col = idx_res // (num_rows+1)
+        col = 2*col+1
+    return (row, col)
+
 class DABBaseTensorMapping(TensorMapping[DotsAndBoxesAction, AlphaZeroTarget]):
     """
     Base class for Dots and Boxes model interfaces containing common functionality.
@@ -18,31 +40,29 @@ class DABBaseTensorMapping(TensorMapping[DotsAndBoxesAction, AlphaZeroTarget]):
         policy_logits = output["policy"]
         value = output["value"]
 
-        policy_probs = F.softmax(policy_logits, dim=0)
-
         num_rows, num_cols = state.rows, state.cols
+        legal_actions = state.get_legal_actions()
 
-        
+        # Create a mask for the legal actions
+        mask = t.full_like(policy_logits, float('-inf'))
+        for (row, col) in legal_actions:
+            idx = edge_to_idx(row, col, num_rows, num_cols)
+            mask[idx] = 0.0
+
+        # Apply mask and convert to probabilities
+        masked_logits = policy_logits + mask
+        policy_probs = F.softmax(masked_logits, dim=-1) # same as dim=0 because of no batch 
+
         # Convert to action->probability dictionary
         policy_dict = {}
         legal_actions = state.get_legal_actions()
         for idx in range(2*num_rows*num_cols+num_rows+num_cols):  #number of edges in the game
             prob = policy_probs[idx].item()  # Convert to float
-            # Convert flat index back to (row, col)
-            if idx < num_rows*(num_cols+1): # vertical edge
-                row = idx // (num_cols+1)
-                row = 2*row+1 
-                col = idx % (num_cols+1)
-                col = 2*col
-            else: # horizontal edge
-                idx_res = idx - num_rows*(num_cols+1) 
-                row = idx_res % (num_rows+1)
-                row = 2*row 
-                col = idx_res // (num_rows+1)
-                col = 2*col+1
+            row, col = idx_to_edge(idx, num_rows, num_cols)
             if (row, col) in legal_actions:
                 policy_dict[(row, col)] = prob
         assert set(policy_dict.keys()) == set(legal_actions), "Policy dictionary keys do not match legal actions"
+        assert (sum(policy_dict.values()) - 1.0)**2 < 1e-6, "Policy dictionary values do not sum to 1"
         return policy_dict, float(value.item())  # Convert value to float
     
     @staticmethod
@@ -63,11 +83,7 @@ class DABBaseTensorMapping(TensorMapping[DotsAndBoxesAction, AlphaZeroTarget]):
         # Convert policy dict to tensor
         policy = t.zeros(2*num_rows*num_cols+num_rows+num_cols, device=device)
         for (row, col), prob in policy_dict.items():
-            if col%2==0: # vertical edge
-                idx = row//2 * (num_cols+1) + col//2
-            else: # horizontal edge
-                idx = col//2 * (num_rows+1) + row//2
-                idx += num_rows*(num_cols+1)  
+            idx = edge_to_idx(row, col, num_rows, num_cols)
             policy[idx] = prob
         
         # Convert legal actions to a tensor mask if available
@@ -75,13 +91,8 @@ class DABBaseTensorMapping(TensorMapping[DotsAndBoxesAction, AlphaZeroTarget]):
         if "legal_actions" in example.data:
             legal_actions_list = example.data["legal_actions"]
             legal_actions = t.zeros(2*num_rows*num_cols+num_rows+num_cols, device=device)
-            for action in legal_actions_list:
-                row, col = action
-                if col%2==0: # vertical edge
-                    idx = row//2 * (num_cols+1) + col//2 
-                else: # horizontal edge
-                    idx = col//2 * (num_rows+1) + row//2
-                    idx += num_rows*(num_cols+1)
+            for row, col in legal_actions_list:
+                idx = edge_to_idx(row, col, num_rows, num_cols)
                 legal_actions[idx] = 1.0
             data["legal_actions"] = legal_actions
         

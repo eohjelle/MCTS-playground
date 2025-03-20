@@ -33,7 +33,8 @@ class Minimax(Agent[ActionType], Generic[ActionType]):
             max_value = float('-inf')
             best_actions = []
             for action, child in node.children.items():
-                child_value = -self.evaluate(child).value
+                sign = 1 if node.state.current_player == child.state.current_player else -1
+                child_value = sign * self.evaluate(child).value
                 if child_value > max_value:
                     max_value = child_value
                     best_actions = [action]

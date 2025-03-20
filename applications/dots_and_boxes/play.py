@@ -1,10 +1,10 @@
 from typing import Tuple, Union, Optional
 from core import ModelInterface
-from core.implementations.MCTS import MCTS
 from core.implementations.AlphaZero import AlphaZero, AlphaZeroModelAgent, AlphaZeroValue, AlphaZeroConfig
-from core.implementations.RandomAgent import RandomAgent
+from core.implementations import Minimax, MCTS, RandomAgent
 from applications.dots_and_boxes.game_state import *
 from applications.dots_and_boxes.NNmodels.SimpleMLP import SimpleMLP
+from applications.dots_and_boxes.NNmodels.MLP import MLP, MLPInitParams
 from applications.dots_and_boxes.encoder import DABSimpleTensorMapping, DABMultiLayerTensorMapping
 #from applications.dots_and_boxes.NNmodels.transformer import DotsAndBoxesTransformerInterface
 import torch
@@ -12,10 +12,11 @@ import os
 
 # Type alias for agents we support
 DotsAndBoxesAgent = Union[
-    MCTS[Tuple[int, int]],
-    AlphaZero[Tuple[int, int]],
+    MCTS[Tuple[int, int], PlayerType],
+    AlphaZero[Tuple[int, int], PlayerType],
     AlphaZeroModelAgent[Tuple[int, int]],
-    RandomAgent[Tuple[int, int]]
+    RandomAgent[Tuple[int, int]],
+    Minimax[Tuple[int, int]]
 ]
 
 def print_board(state: DotsAndBoxesGameState) -> None:
@@ -42,7 +43,7 @@ def get_human_action(state: DotsAndBoxesGameState) -> Tuple[int, int]:
         except ValueError as e:
             print(f"ValueError: {e}")
 
-def create_agent(initial_state: DotsAndBoxesGameState, agent_type: str) -> Optional[DotsAndBoxesAgent]:
+def create_agent(initial_state: DotsAndBoxesGameState, agent_type: str, project: str = "AlphaZero-DotsAndBoxes") -> Optional[DotsAndBoxesAgent]:
     """Create an agent of the specified type.
     
     Args:
@@ -58,6 +59,8 @@ def create_agent(initial_state: DotsAndBoxesGameState, agent_type: str) -> Optio
         return MCTS(initial_state, num_simulations=100)
     elif agent_type == 'random':
         return RandomAgent(initial_state)
+    elif agent_type == 'minimax':
+        return Minimax(initial_state)
     else:  # alphazero or model
         # Get model type
         while True:
@@ -71,18 +74,32 @@ def create_agent(initial_state: DotsAndBoxesGameState, agent_type: str) -> Optio
         match model_type:
             case 'mlp':
                 model_name = 'dots_and_boxes_mlp'
-                model_architecture = SimpleMLP
+                model_architecture = MLP
                 tensor_mapping = DABSimpleTensorMapping()
+                default_model_params: MLPInitParams = {
+                    'num_rows': MAX_SIZE,
+                    'num_cols': MAX_SIZE,
+                    'hidden_sizes': [32, 128, 32]
+                }
             case 'transformer':
                 raise NotImplementedError("Transformer model not implemented yet")
             case _:
                 raise ValueError(f"Invalid model type: {model_type}")
             
         # Load checkpoint if it exists
-        if os.path.exists(f"applications/dots_and_boxes/checkpoints/{model_type}/best_model.pt"):
-            model = ModelInterface.from_file(
+        try:
+            model = ModelInterface.from_wandb(
                 model_architecture=model_architecture,
-                path=f"applications/dots_and_boxes/checkpoints/{model_type}/best_model.pt"
+                project=project,
+                model_name=model_name,
+            )
+        except Exception as e:
+            print(e)
+            print(f"Error loading {model_type} model from wandb. Creating new model.")
+            model = ModelInterface(
+                model_architecture=model_architecture,
+                init_params=default_model_params,
+                device=device
             )
             
         # Create appropriate agent type
@@ -94,9 +111,9 @@ def create_agent(initial_state: DotsAndBoxesGameState, agent_type: str) -> Optio
                 tensor_mapping=tensor_mapping,
                 params=AlphaZeroConfig(
                     exploration_constant=1.0,
-                    dirichlet_alpha=0.3,
-                    dirichlet_epsilon=0.25,
-                    temperature=1.0
+                    dirichlet_alpha=0.0,
+                    dirichlet_epsilon=0.0,
+                    temperature=0.0
                 )
             )
         else:  # model
@@ -152,18 +169,18 @@ def play_game(
 
 def main():
     # Get player types
-    valid_types = ['human', 'mcts', 'alphazero', 'model', 'random']
+    valid_types = ['human', 'mcts', 'alphazero', 'model', 'random', 'minimax']
      
     # Get X player type
     while True:
-        a_type = input("Choose A player type (human/mcts/alphazero/model/random): ").lower()
+        a_type = input(f"Choose A player type ({'/'.join(valid_types)}): ").lower()
         if a_type in valid_types:
             break
         print(f"Please enter one of: {', '.join(valid_types)}")
     
     # Get O player type
     while True:
-        b_type = input("Choose B player type (human/mcts/alphazero/model/random): ").lower()
+        b_type = input(f"Choose B player type ({'/'.join(valid_types)}): ").lower()
         if b_type in valid_types:
             break
         print(f"Please enter one of: {', '.join(valid_types)}")

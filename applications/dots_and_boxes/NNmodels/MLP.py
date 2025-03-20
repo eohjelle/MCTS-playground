@@ -11,12 +11,12 @@ class MLPInitParams(TypedDict):
 class MLPLayer(nn.Module):
     def __init__(self, input_size: int, output_size: int):
         super().__init__()
-        # self.norm = nn.LayerNorm(input_size)
-        self.fc1 = nn.Linear(input_size, output_size)
+        self.norm = nn.LayerNorm(input_size)
+        self.linear = nn.Linear(input_size, output_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x = self.norm(x)
-        x = self.fc1(x)
+        x = self.norm(x)
+        x = self.linear(x)
         x = F.relu(x)
         return x
         

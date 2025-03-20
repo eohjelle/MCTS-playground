@@ -46,6 +46,17 @@
                 "PYTHONPATH": "${workspaceFolder}"
             },
             "args": ["--model", "experimental_transformer"]
-        }
+        },
+        {
+            "name": "Python: Play Dots and Boxes",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/applications/dots_and_boxes/play.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
     ]
 } 

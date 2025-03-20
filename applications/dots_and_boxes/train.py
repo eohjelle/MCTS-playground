@@ -19,6 +19,8 @@ default_wandb_watch_params = {
 
 def train(
     *,
+    num_rows: int,
+    num_cols: int,
     optimizer_type: Literal['adam'],
     optimizer_params: Dict[str, Any],
     lr_scheduler_type: Literal['plateau'],
@@ -136,7 +138,7 @@ def train(
 
     # Initialize agents to evaluate against
     ## Create minimax agent and expand the game tree, this will be used for evaluation later on
-    state = DotsAndBoxesGameState()
+    state = DotsAndBoxesGameState(rows=num_rows, cols=num_cols)
     minimax_agent = Minimax(state)
     minimax_agent_root = minimax_agent.root
     minimax_agent()
@@ -167,7 +169,7 @@ def train(
 
             # Train
             trainer.train(
-                initial_state=lambda: DotsAndBoxesGameState(),
+                initial_state=lambda: DotsAndBoxesGameState(rows=num_rows, cols=num_cols),
                 evaluate_against_agents=opponents,
                 optimizer=optimizer,
                 wandb_run=wandb_run,
@@ -188,7 +190,7 @@ def train(
                 model_interface=model_interface,
                 tensor_mapping=model_tensor_mapping,
                 buffer=replay_buffer,
-                initial_state=lambda: DotsAndBoxesGameState(),
+                initial_state=lambda: DotsAndBoxesGameState(rows=num_rows, cols=num_cols),
                 evaluate_against_agents=opponents,
                 optimizer=optimizer,
                 lr_scheduler=lr_scheduler,

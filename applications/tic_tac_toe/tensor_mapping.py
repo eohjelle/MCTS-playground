@@ -26,7 +26,7 @@ class BaseTensorMapping:
         
         # Apply mask and convert to probabilities
         masked_logits = policy_logits + mask
-        policy_probs = F.softmax(masked_logits, dim=0)
+        policy_probs = F.softmax(masked_logits, dim=-1) # same as dim=0 because of no batch 
         
         # Convert to action->probability dictionary
         policy_dict = {}
