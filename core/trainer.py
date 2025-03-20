@@ -99,11 +99,10 @@ class TreeSearchTrainer(Protocol[ActionType, ValueType, TargetType, TreeSearchPa
     def extend_replay_buffer(self, examples: List[TrainingExample[ActionType, TargetType]]):
         """Extend the replay buffer with new examples."""
         device = next(self.model.model.parameters()).device
-        self.replay_buffer.extend(
-            examples, 
-            lambda state: self.tensor_mapping.encode_state(state, device), 
-            lambda example: self.tensor_mapping.encode_example(example, device)
-        )
+
+        states = self.tensor_mapping.encode_states([ex.state for ex in examples], device)
+        targets, data = self.tensor_mapping.encode_examples(examples, device)
+        self.replay_buffer.extend(states, targets, data)
 
     def train(
         self,

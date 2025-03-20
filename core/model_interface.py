@@ -29,10 +29,10 @@ class ModelInterface(Generic[ModelInitParams]):
         """Convenience function for single-state inference."""
         # We add the batch dimension before model inference and remove it after.
         device = next(self.model.parameters()).device
-        encoded_state = tensor_mapping.encode_state(state, device).unsqueeze(0)
+        encoded_state = tensor_mapping.encode_states([state], device)
         outputs = self.model(encoded_state)
-        outputs = {k: v.squeeze(0) for k, v in outputs.items()}
-        return tensor_mapping.decode_output(outputs, state)
+        decoded_outputs = tensor_mapping.decode_outputs(outputs, [state])
+        return decoded_outputs[0]
     
     def save_checkpoint(self, path: str, metadata: Dict[str, Any] = {}) -> None:
         """Save model checkpoint."""

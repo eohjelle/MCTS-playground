@@ -35,38 +35,39 @@ class DABBaseTensorMapping(TensorMapping[DotsAndBoxesAction, AlphaZeroTarget]):
     Edges (i,j) to indices idx enumeration via first listing all vertical edges, then horizontal ones; laft to right, top to bottom.
     """
     @staticmethod
-    def decode_output(output: Dict[str, t.Tensor], state: DotsAndBoxesGameState) -> AlphaZeroTarget:
+    def decode_outputs(outputs: Dict[str, t.Tensor], states: List[DotsAndBoxesGameState]) -> List[AlphaZeroTarget]:
         """Convert raw model output to policy dictionary and value."""
-        policy_logits = output["policy"]
-        value = output["value"]
+        policy_logits = outputs["policy"]
+        value = outputs["value"]
 
-        num_rows, num_cols = state.rows, state.cols
-        legal_actions = state.get_legal_actions()
+        num_rows, num_cols = states[0].rows, states[0].cols
+        legal_actions_list = [state.get_legal_actions() for state in states]
 
         # Create a mask for the legal actions
-        mask = t.full_like(policy_logits, float('-inf'))
-        for (row, col) in legal_actions:
-            idx = edge_to_idx(row, col, num_rows, num_cols)
-            mask[idx] = 0.0
+        masks = t.full_like(policy_logits, float('-inf'))
+        for i, legal_actions in enumerate(legal_actions_list):
+            for (row, col) in legal_actions:
+                idx = edge_to_idx(row, col, num_rows, num_cols)
+                masks[i][idx] = 0.0
 
         # Apply mask and convert to probabilities
-        masked_logits = policy_logits + mask
-        policy_probs = F.softmax(masked_logits, dim=-1) # same as dim=0 because of no batch 
+        masked_logits = policy_logits + masks
+        policy_probs = F.softmax(masked_logits, dim=-1)
 
         # Convert to action->probability dictionary
-        policy_dict = {}
-        legal_actions = state.get_legal_actions()
-        for idx in range(2*num_rows*num_cols+num_rows+num_cols):  #number of edges in the game
-            prob = policy_probs[idx].item()  # Convert to float
-            row, col = idx_to_edge(idx, num_rows, num_cols)
-            if (row, col) in legal_actions:
-                policy_dict[(row, col)] = prob
-        assert set(policy_dict.keys()) == set(legal_actions), "Policy dictionary keys do not match legal actions"
-        assert (sum(policy_dict.values()) - 1.0)**2 < 1e-6, "Policy dictionary values do not sum to 1"
-        return policy_dict, float(value.item())  # Convert value to float
+        policy_dict = [{} for _ in states]
+        for i, legal_actions in enumerate(legal_actions_list):
+            for idx in range(2*num_rows*num_cols+num_rows+num_cols):  #number of edges in the game
+                prob = policy_probs[i][idx].item()  # Convert to float
+                row, col = idx_to_edge(idx, num_rows, num_cols)
+                if (row, col) in legal_actions:
+                    policy_dict[i][(row, col)] = prob
+        assert [set(policy_dict[i].keys()) == set(legal_actions_list[i]) for i in range(len(states))], "Policy dictionary keys do not match legal actions"
+        assert [sum(policy_dict[i].values()) - 1.0 for i in range(len(states))], "Policy dictionary values do not sum to 1"
+        return [(policy_dict[i], float(value.item())) for i in range(len(states))] 
     
     @staticmethod
-    def encode_example(example: TrainingExample[DotsAndBoxesAction, AlphaZeroTarget], device: t.device) -> Tuple[Dict[str, t.Tensor], Dict[str, Any]]:
+    def encode_examples(examples: List[TrainingExample[DotsAndBoxesAction, AlphaZeroTarget]], device: t.device) -> Tuple[Dict[str, t.Tensor], Dict[str, Any]]:
         """Convert a training example into tensor targets and auxiliary data for loss computation.
         
         Args:
@@ -76,52 +77,55 @@ class DABBaseTensorMapping(TensorMapping[DotsAndBoxesAction, AlphaZeroTarget]):
             Tuple of (targets, data), where targets is a dictionary of tensors and 
             data is a dictionary of auxiliary tensors
         """
-        policy_dict, value = example.target
-
-        num_rows, num_cols = example.state.rows, example.state.cols # type: ignore
+        policy_dict_list, value_list = zip(*[example.target for example in examples])
+        num_rows, num_cols = examples[0].state.rows, examples[0].state.cols # type: ignore
+        N_edges = 2*num_rows*num_cols+num_rows+num_cols
         
         # Convert policy dict to tensor
-        policy = t.zeros(2*num_rows*num_cols+num_rows+num_cols, device=device)
-        for (row, col), prob in policy_dict.items():
-            idx = edge_to_idx(row, col, num_rows, num_cols)
-            policy[idx] = prob
+        policy = t.zeros(len(examples), N_edges, device=device, dtype=t.float32)
+        for i, policy_dict in enumerate(policy_dict_list):
+            for (row, col), prob in policy_dict.items():
+                idx = edge_to_idx(row, col, num_rows, num_cols)
+                policy[i][idx] = prob
         
         # Convert legal actions to a tensor mask if available
         data = {}
-        if "legal_actions" in example.data:
-            legal_actions_list = example.data["legal_actions"]
-            legal_actions = t.zeros(2*num_rows*num_cols+num_rows+num_cols, device=device)
-            for row, col in legal_actions_list:
-                idx = edge_to_idx(row, col, num_rows, num_cols)
-                legal_actions[idx] = 1.0
+        if "legal_actions" in examples[0].data:
+            legal_actions_list = [example.data["legal_actions"] for example in examples]
+            legal_actions = t.zeros(len(examples), N_edges, device=device, dtype=t.float32)
+            for i, legal_actions_list in enumerate(legal_actions_list):
+                for row, col in legal_actions_list:
+                    idx = edge_to_idx(row, col, num_rows, num_cols)
+                    legal_actions[i][idx] = 1.0
             data["legal_actions"] = legal_actions
         
         return {
             "policy": policy,
-            "value": t.tensor(value, device=device, dtype=t.float32)
+            "value": t.tensor(value_list, device=device, dtype=t.float32)
         }, data
     
 class DABSimpleTensorMapping(DABBaseTensorMapping):
     @staticmethod
-    def encode_state(state: DotsAndBoxesGameState, device: t.device) -> t.Tensor:
+    def encode_states(states: List[DotsAndBoxesGameState], device: t.device) -> t.Tensor:
         """Convert board state to neural network input tensor.
         Input: game state with board of size MAX_SIZE x MAX_SIZE; hence having 2*MAX_SIZE*(MAX_SIZE+1) edges
         Output: pyTorch matrix of size (2*MAX_SIZE)x(MAX_SIZE+1); the first MAX_SIZE rows encode placed VERTICAL edges
         and the last MAX_SIZE rows encode the transpose of the HORIZONTAL edges
         """
-        board = state.board
+        boards = np.array([state.board for state in states]) # (num_states, 2*num_rows + 1, 2*num_cols + 1)
         #Process VERTICALS
-        VerticalEdges = board[1::2, ::2]
-        res_top = np.where(VerticalEdges == VERTICAL, 1, 0).flatten()
+        VerticalEdges = boards[:, 1::2, ::2] # (num_states, num_rows, num_cols + 1)
+        res_top = np.where(VerticalEdges == VERTICAL, 1, 0).reshape(len(states), -1) # (num_states, num_rows*(num_cols + 1))
         #Process HORIZONTALS
-        HorizontalEdges = board[::2, 1::2]
-        res_bottom = np.transpose(np.where(HorizontalEdges == HORIZONTAL, 1, 0)).flatten()
+        HorizontalEdges = boards[:, ::2, 1::2] # (num_states, num_rows + 1, num_cols)
+        res_bottom = np.transpose(np.where(HorizontalEdges == HORIZONTAL, 1, 0), axes=(0,2,1)).reshape(len(states), -1) # (num_states, (num_rows + 1) * num_cols)
         #Concatenate
-        result = np.concatenate((res_top, res_bottom), axis = 0)
+        result = np.concatenate((res_top, res_bottom), axis = 1) # (num_states, num_rows*(num_cols + 1) + (num_rows + 1) * num_cols)
         encoded_board = t.from_numpy(result)
         encoded_board = encoded_board.to(device=device)
         return encoded_board
 
+# TODO: Fix below class or remove if it's not used
 class DABMultiLayerTensorMapping(DABBaseTensorMapping):
     @staticmethod
     def encode_state(state: DotsAndBoxesGameState, device: t.device) -> t.Tensor:

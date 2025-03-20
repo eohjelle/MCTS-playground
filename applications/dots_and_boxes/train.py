@@ -5,6 +5,7 @@ from core.implementations import AlphaZeroTrainer, AlphaZeroConfig, MCTS, Random
 from applications.dots_and_boxes.NNmodels.SimpleMLP import SimpleMLPInitParams, SimpleMLP  
 from applications.dots_and_boxes.NNmodels.transformer import TransformerInitParams, DotsAndBoxesTransformer
 from applications.dots_and_boxes.NNmodels.MLP import MLPInitParams, MLP
+from applications.dots_and_boxes.NNmodels.linear_attention_transformer import LinearAttentionTransformerInitParams, LinearAttentionTransformer
 from applications.dots_and_boxes.game_state import DotsAndBoxesGameState
 from applications.dots_and_boxes.encoder import DABSimpleTensorMapping, DABMultiLayerTensorMapping
 from wandb.sdk.wandb_run import Run
@@ -50,6 +51,9 @@ def train(
             model_tensor_mapping = DABSimpleTensorMapping()
         case 'mlp':
             model_architecture = MLP
+            model_tensor_mapping = DABSimpleTensorMapping()
+        case 'linear_attention_transformer':
+            model_architecture = LinearAttentionTransformer
             model_tensor_mapping = DABSimpleTensorMapping()
         case _:
             raise ValueError(f"Invalid model type: {model_type}")

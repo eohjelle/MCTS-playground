@@ -24,28 +24,11 @@ class ReplayBuffer:
 
     def extend(
         self, 
-        examples: List[TrainingExample], 
-        state_encoder: Callable[[State], torch.Tensor],
-        example_encoder: Callable[[TrainingExample], Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]]
+        states: torch.Tensor,
+        targets: Dict[str, torch.Tensor],
+        data: Dict[str, torch.Tensor]
     ):
         """Extend the replay buffer with new examples."""
-        states = torch.stack([
-            state_encoder(ex.state) for ex in examples
-        ])
-        encoded_targets, encoded_data = zip(*[example_encoder(ex) for ex in examples])
-        targets = {
-            key: torch.stack([
-                encoded_targets[i][key] for i in range(len(encoded_targets))
-            ])
-            for key in encoded_targets[0].keys()
-        }
-        data = {
-            key: torch.stack([
-                encoded_data[i][key] for i in range(len(encoded_data))
-            ])
-            for key in encoded_data[0].keys()
-        }
-
         # Initialize buffer if it's empty, otherwise extend it
         if self.states.numel() == 0:
             self.states = states

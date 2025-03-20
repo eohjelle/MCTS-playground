@@ -5,6 +5,7 @@ from typing import Dict, Tuple, TypedDict
 from applications.dots_and_boxes.game_state import *
 from torchtyping import TensorType
 import os
+import einops
 from math import copysign
 
 class TransformerInitParams(TypedDict):
@@ -47,7 +48,7 @@ class DotsAndBoxesTransformer(nn.Module):
         N_edges = 2*num_rows*num_cols+num_rows+num_cols
         
         # Add learned positional embeddings
-        self.pos_embedding = nn.Embedding(N_edges, embed_dim)
+        self.pos_embedding = nn.Parameter((embed_dim)**(-0.5) * torch.randn(1, N_edges, embed_dim))
         
         # Stack of transformer blocks that process the board state
         self.transformer_blocks = nn.Sequential(*[
@@ -75,12 +76,10 @@ class DotsAndBoxesTransformer(nn.Module):
                 raise ValueError(f"Invalid activation function: {activation}")
 
         # Policy head: maps each position's embedding to a single logit
-        self.policy_contraction = nn.Parameter(torch.randn(N_edges, embed_dim, N_edges))
-        self.policy_bias = nn.Parameter(torch.randn(1, N_edges))
+        self.policy_head = nn.Linear(embed_dim, 1)
 
         # Value head: linear layer to map board position and embedding dimensions to a single value estimate
-        self.value_contraction = nn.Parameter(torch.randn(N_edges, embed_dim, 1))
-        self.value_bias = nn.Parameter(torch.randn(1, 1))
+        self.value_head = nn.Linear(N_edges*embed_dim, 1)
 
     def forward(self, x):
         """
@@ -96,29 +95,24 @@ class DotsAndBoxesTransformer(nn.Module):
                 value: Value estimates of shape (batch_size, 1), bounded between -1 and 1
         """
         # Transform board state through transformer backbone
-        mask = x
-        x = self.input_embedding(x)  # (batch_size, N_edges, embed_dim)
-        pos_emb = self.pos_embedding(torch.arange(N_edges, device=x.device).unsqueeze(0))  # (1, N_edges, embed_dim)
-        x = x + pos_emb  # Add positional embeddings
+        x = self.input_embedding(x) + self.pos_embedding  # (batch_size, 9, embed_dim)
+
         for transformer in self.transformer_blocks:
-            x = transformer(x)       # (batch_size, N_edges, embed_dim)
+            x = transformer(x)       # (batch_size, 9, embed_dim)
         
         # Apply final layer norm
         x = self.final_norm(x)
         x = self.final_activation(x)
-        
-        # Policy head outputs one logit per position
-        policy = torch.einsum('b s e, s e p -> b p', x, self.policy_contraction) + self.policy_bias
 
-        # Apply the mask: set the policy probabilities of illegal moves to a very low value
-        if mask is not None:
-            policy = policy + (mask * -10)  #Apply a large negative value to illegal moves    
-        
-        # Value head outputs a single value
-        value = torch.einsum('b s e, s e v -> b v', x, self.value_contraction) + self.value_bias # (batch_size, 1)
-        value = torch.tanh(value)  # (batch_size, 1)
-        
+        # Policy head
+        policy_logits = self.policy_head(x).squeeze(-1) # (batch_size, 9)
+
+        # Value head
+        x = einops.rearrange(x, 'b l i -> b (l i)')
+        x = self.value_head(x).squeeze(-1) # (batch_size,)
+        value = torch.tanh(x) # (batch_size,)
+
         return {
-            "policy": policy,
+            "policy": policy_logits,
             "value": value
         }
