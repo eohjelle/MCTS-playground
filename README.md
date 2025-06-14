@@ -1,15 +1,18 @@
 #todo
 
-- [ ] PettingZoo integration
+- [ ] OpenSpiel integration
+  - [ ] Change get_reward to rewards to be more compatible with openSpiel's state? In fact, rearrange it so that OpenSpiel's state satisfies the protocol?
+- [ ] Use absl.flags in training scripts
+- [ ] "Actor" based training for separate playing and training threads
 - [ ] Finish and test Dirichlet implementation
 - [ ] Documentation
-- [ ] Cleanup and organization
+- [ ] Cleanup and organization; adhere to Google Python style guidelines
 
 # MCTS Playground
 
 This repository contains an implementation of AlphaZero from sctratch. The implementation uses clear abstractions for tree search algorithms based on Monte Carlo Tree Search (MCTS) as well as for training deep learning models via self play.
 
-The goal of this project is to be useful for educational purposes and research. In particular, the code is designed for convenient prototyping of tree search algorithms based on AlphaZero. One such prototype can be found in the folder [`examples/Dirichlet`](examples/Diriichlet/).
+The goal of this project is to be useful for educational purposes and research. In particular, the code is designed for convenient prototyping of tree search algorithms based on AlphaZero. One such prototype can be found in the folder [`examples/Dirichlet`](examples/Dirichlet/).
 
 All code in this project is written in Python, and is not designed for performance. There are numerous projects that provide efficient implementations of tree search algorithms, for example ........
 
