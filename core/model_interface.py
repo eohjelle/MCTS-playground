@@ -144,6 +144,9 @@ class ModelPredictor(Generic[ActionType, TargetType]):
         # We add the batch dimension before model inference and remove it after.
         device = next(self.model.model.parameters()).device
         encoded_state = self.tensor_mapping.encode_states([state], device)
-        outputs = self.model.model(encoded_state)
+        # autocast is a context manager that enables automatic mixed precision.
+        # On CPU, it uses bfloat16 for AMX. On CUDA, it uses float16 for Tensor Cores.
+        with torch.autocast(device_type=device.type):
+            outputs = self.model.model(encoded_state)
         decoded_outputs = self.tensor_mapping.decode_outputs(outputs, [state])
         return decoded_outputs[0]

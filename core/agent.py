@@ -4,8 +4,7 @@ from core.tree_search import Node
 from core.types import ActionType, PlayerType
 
 class TreeAgent(Protocol[ActionType]):
-    """Protocol for agents that can play games. TreeSearch implementations 
-    are tree agents, but agents don't need to use tree search.
+    """Protocol for agents that can play games, more general than the TreeSearch protocol. 
 
     Tree agents are required to maintain a root node representing the current state of the game. 
     This is convenient for functions like simulate_game.

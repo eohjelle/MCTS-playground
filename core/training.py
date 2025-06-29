@@ -372,8 +372,11 @@ class Trainer(Generic[ActionType, PlayerType, ModelInitParams, TargetType]):
         """Train model on a batch. Returns a dictionary of metrics."""
         states, targets, extra_data = self.replay_buffer.sample(self.config.learning_batch_size)
         self.model.model.train()
-        model_outputs = self.model.model(states)
-        loss, metrics = self.config.training_adapter.compute_loss(model_outputs, targets, extra_data)
+        # autocast is a context manager that enables automatic mixed precision.
+        # On CPU, it uses bfloat16 for AMX. On CUDA, it uses float16 for Tensor Cores.
+        with torch.autocast(device_type=self.config.learning_device.type):
+            model_outputs = self.model.model(states)
+            loss, metrics = self.config.training_adapter.compute_loss(model_outputs, targets, extra_data)
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
@@ -402,14 +405,13 @@ class Trainer(Generic[ActionType, PlayerType, ModelInitParams, TargetType]):
 
             # Start main training loop
             self.logger.info("Starting main training loop..." if self.training_step.value == 0 else f"Resuming training from step {self.training_step.value + 1}...")
-            last_checkpoint_time = last_step_time = start_time = time.time()
+            last_checkpoint_time = last_examples_time = start_time = time.time()
             log_dict = {}
             total_examples_in_session = 0
             for step in itertools.count(self.training_step.value + 1):
                 self.logger.info(f"Training step {step}. Time elapsed: {(time.time() - start_time)/3600:.2f} hours. Current buffer size: {len(self.replay_buffer)}.")
 
                 # Collect new examples from actors
-                temp_start_time = time.time()
                 new_examples_count = 0
                 while True:
                     while not examples_queue.empty():
@@ -422,11 +424,11 @@ class Trainer(Generic[ActionType, PlayerType, ModelInitParams, TargetType]):
                         time.sleep(1.0)
                     else:
                         break
+                log_dict['examples_per_second'] = new_examples_count / (time.time() - last_examples_time)
+                last_examples_time = time.time()
                 log_dict['buffer_size'] = len(self.replay_buffer)
-                log_dict['new_examples_count'] = new_examples_count
                 total_examples_in_session += new_examples_count
                 log_dict['total_examples_in_session'] = total_examples_in_session
-                log_dict['time_to_collect_examples'] = time.time() - temp_start_time
                 self.logger.info(f"Collected {new_examples_count} examples from actors in {log_dict['time_to_collect_examples']:.2f} s.")
 
                 # Train on replay buffer

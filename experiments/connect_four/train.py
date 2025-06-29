@@ -17,6 +17,7 @@ flags.DEFINE_string("run_id", None, "Wandb run ID to resume from")
 flags.DEFINE_string("buffer_path", None, "Path to an existing replay buffer to load")
 flags.DEFINE_string("model_path", None, "Path to an existing model to load")
 flags.DEFINE_string("log_level", "INFO", "Logging level")
+flags.DEFINE_integer("num_actors", 10, "Number of actors")
 
 def state_factory():
     game = pyspiel.load_game("connect_four")
@@ -93,7 +94,7 @@ def main(argv):
         wandb_save_artifacts=False,
         load_model_from_path=FLAGS.model_path,
         load_replay_buffer_from_path=FLAGS.buffer_path,
-        num_actors=10,
+        num_actors=FLAGS.num_actors,
         learning_min_buffer_size=2048,
         buffer_max_size = 100 * 1024,
         learning_min_new_examples_per_step=128,
