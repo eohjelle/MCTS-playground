@@ -1,29 +1,27 @@
-from typing import Protocol, List, Self
+from typing import Protocol, List, Self, Dict
 
 class State[ActionType, PlayerType](Protocol):
-    def get_legal_actions(self) -> List[ActionType]:
-        """Return list of legal actions at this state."""
+    """Base protocol for all (game) states."""
+    current_player: PlayerType
+    legal_actions: List[ActionType]
+    is_terminal: bool
+    players: List[PlayerType]
+    rewards: Dict[PlayerType, float]
+
+    def apply_action(self, action: ActionType):
+        """Apply action to state, modifying the state in place."""
         ...
 
-    def apply_action(self, action: ActionType) -> Self:
-        """Apply action to state and return new state."""
-        ...
-    
-    def is_terminal(self) -> bool:
-        """Return True if state is terminal (game over)."""
-        ...
-    
-    def get_reward(self, player: PlayerType) -> float:
-        """Return reward from player's perspective (for example, -1 for loss, 0 for draw, 1 for win)."""
-        ...
-    
-    @property
-    def current_player(self) -> PlayerType:
-        """Return current player (for example, 1 or -1)."""
+    def clone(self) -> Self:
+        """Return a copy of the state."""
         ...
 
     def __eq__(self, other: Self) -> bool:
         ...
     
-    def __hash__(self) -> str:
+    def __hash__(self) -> int:
+        ...
+
+    def __str__(self) -> str:
+        """Return a human-readable representation of the state."""
         ...

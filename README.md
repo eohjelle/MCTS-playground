@@ -1,12 +1,21 @@
 #todo
 
 - [ ] OpenSpiel integration
-  - [ ] Change get_reward to rewards to be more compatible with openSpiel's state? In fact, rearrange it so that OpenSpiel's state satisfies the protocol?
+  - [x] Change get_reward to rewards to be more compatible with openSpiel's state? In fact, rearrange it so that OpenSpiel's state satisfies the protocol?
+  - [x] Implement wrapper for OpenSpiel states
+  - [ ] Implement wrapper for OpenSpiel algorithms (to be used in conjunction with OpenSpiel game states)
 - [ ] Use absl.flags in training scripts
-- [ ] "Actor" based training for separate playing and training threads
+- [x] "Actor" based training for separate playing and training threads
 - [ ] Finish and test Dirichlet implementation
 - [ ] Documentation
 - [ ] Cleanup and organization; adhere to Google Python style guidelines
+- [ ] Add test suite for tensor mapping and training adapter implementations
+- [x] Isolate game simulation logic (generate trajectory and benchmark)
+- [x] Replace print statements with proper logging
+- [ ] Separate the notion of states from observations for imperfect information games.
+  - Should observations be a property of State?
+  - Which classes should be modified? TensorMapping (encode states become encode observations), what about TrainingExample and TrajectoryStep? Should reward be absorbed into the observation?
+- [ ] Enable parallelizable TreeSearch? Run processes in parallel. Instead of evaluating nodes, add them to a queue. Once the queue is large enough, do a "batch_evaluate" and return results to subprocesses.
 
 # MCTS Playground
 
@@ -31,23 +40,3 @@ See the [core README](core/README.md) for detailed documentation of these abstra
 ## Tic tac toe
 
 To play run the following command in the root folder:
-
-```zsh
-PYTHONPATH=$PYTHONPATH:. python applications/tic_tac_toe/play.py
-```
-
-Example training run from root folder:
-
-```zsh
-PYTHONPATH=$PYTHONPATH:. python applications/tic_tac_toe/train.py --model transformer --wandb --resume_id 1q109a9s
-```
-
-The `--wandb` argument enables logging of various metrics, the model, and replay buffer. The `--resume_id` argument means that training will resume a previous training run (in this case with id `1q109a9s`).
-
-### Interpretability
-
-![Attention mask](applications/tic_tac_toe/plots/tic_tac_toe_attn_mask.png)
-
-![Head 1 attention pattern](applications/tic_tac_toe/plots/tic_tac_toe_head_1.png)
-
-![Tic tac toe MCTS benchmark](applications/tic_tac_toe/tic_tac_toe_mcts_benchmark.png)

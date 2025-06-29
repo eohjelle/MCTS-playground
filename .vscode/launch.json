@@ -2,61 +2,62 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Tic Tac Toe",
+            "name": "Python: Run Module (prompt)",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/applications/tic_tac_toe/play.py",
+            "module": "${input:moduleName}",
             "console": "integratedTerminal",
             "justMyCode": false,
+            "cwd": "${workspaceFolder}",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             }
         },
         {
-            "name": "Python: Tic Tac Toe Train MLP",
+            "name": "Python: Run Module with Args (prompt)",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/applications/tic_tac_toe/train.py",
+            "module": "${input:moduleName}",
+            "args": "${input:moduleArgs}",
             "console": "integratedTerminal",
             "justMyCode": false,
+            "cwd": "${workspaceFolder}",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             }
         },
         {
-            "name": "Python: Tic Tac Toe Train Transformer",
+            "name": "Python: Dots and Boxes Train",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/applications/tic_tac_toe/train.py",
+            "module": "examples.dots_and_boxes.train",
+            "args": [
+                "--model=transformer",
+                "--num_rows=3",
+                "--num_cols=3",
+                "--num_simulations=100",
+                "--max_training_time_hours=0.1"
+            ],
             "console": "integratedTerminal",
             "justMyCode": false,
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}"
-            },
-            "args": ["--model", "transformer"]
-        },
-        {
-            "name": "Python: Tic Tac Toe Train Experimental Transformer",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/applications/tic_tac_toe/train.py",
-            "console": "integratedTerminal",
-            "justMyCode": false,
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}"
-            },
-            "args": ["--model", "experimental_transformer"]
-        },
-        {
-            "name": "Python: Play Dots and Boxes",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/applications/dots_and_boxes/play.py",
-            "console": "integratedTerminal",
-            "justMyCode": false,
+            "cwd": "${workspaceFolder}",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             }
+        }
+    ],
+    "inputs": [
+        {
+            "id": "moduleName",
+            "description": "Enter module name",
+            "default": "examples.dots_and_boxes.train", 
+            "type": "promptString"
         },
+        {
+            "id": "moduleArgs",
+            "description": "Enter command line arguments (e.g., --model=transformer --num_rows=3)",
+            "default": "",
+            "type": "promptString"
+        }
     ]
 } 

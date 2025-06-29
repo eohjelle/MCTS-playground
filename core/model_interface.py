@@ -1,20 +1,15 @@
 from typing import Generic, Optional, Self, Type, Dict, Any
 import torch
-from core.tensor_mapping import TensorMapping
-from core.tree_search import State
-from core.types import ActionType, TargetType, ModelInitParams
+from .state import State
+from .tensor_mapping import TensorMapping
+from .types import ActionType, TargetType, ModelInitParams
 import os
 import wandb
 from wandb.sdk.wandb_run import Run
 
-class ModelInterface(Generic[ModelInitParams]):
-    """Protocol for (deep learning) models used in tree search.
-    
-    This interface acts as a layer between tree search algorithms and PyTorch models.
-    Its main responsibility is converting between game states and PyTorch tensors.
-
-    The model attribute gives direct access to the underlying PyTorch model for forward(),
-    parameters(), etc.
+class Model(Generic[ModelInitParams]):
+    """Wrapper for a PyTorch model. 
+    Provides convenience functions for saving and loading models.
     """
     model: torch.nn.Module
     init_params: ModelInitParams
@@ -24,17 +19,8 @@ class ModelInterface(Generic[ModelInitParams]):
         self.model.to(device)
         self.model.eval()
         self.init_params = init_params
-
-    def predict(self, tensor_mapping: TensorMapping[ActionType, TargetType], state: State[ActionType, Any]) -> TargetType:
-        """Convenience function for single-state inference."""
-        # We add the batch dimension before model inference and remove it after.
-        device = next(self.model.parameters()).device
-        encoded_state = tensor_mapping.encode_states([state], device)
-        outputs = self.model(encoded_state)
-        decoded_outputs = tensor_mapping.decode_outputs(outputs, [state])
-        return decoded_outputs[0]
     
-    def save_checkpoint(self, path: str, metadata: Dict[str, Any] = {}) -> None:
+    def save_to_file(self, path: str, metadata: Dict[str, Any] = {}) -> None:
         """Save model checkpoint."""
         torch.save({
             **metadata,
@@ -102,7 +88,7 @@ class ModelInterface(Generic[ModelInitParams]):
                 }
             )
             path = os.path.join(run.dir, f'{model_name}.pt')
-            self.save_checkpoint(path, metadata)
+            self.save_to_file(path, metadata)
             model_artifact.add_file(path)
             run.log_artifact(model_artifact)
             if wandb_run is None:
@@ -135,12 +121,29 @@ class ModelInterface(Generic[ModelInitParams]):
             api = wandb.Api()
             artifact = api.artifact(f'{project}/{model_name}:{model_version}')
             artifact_dir = artifact.download(root=artifact_dir)
-            model_interface = cls.from_file(
+            model = cls.from_file(
                 model_architecture=model_architecture,
                 path=os.path.join(artifact_dir, f'{model_name}.pt'),
                 device=device
             )
-            return model_interface
+            return model
         except Exception as e:
             print(f"Error loading model from wandb: {e}")
             raise e
+
+
+class ModelPredictor(Generic[ActionType, TargetType]):
+    """Class that uses a model to make predictions."""
+
+    def __init__(self, model: Model, tensor_mapping: 'TensorMapping[ActionType, TargetType]'):
+        self.model = model
+        self.tensor_mapping = tensor_mapping
+    
+    def __call__(self, state: State[ActionType, Any]) -> TargetType:
+        """Convenience function for single-state inference."""
+        # We add the batch dimension before model inference and remove it after.
+        device = next(self.model.model.parameters()).device
+        encoded_state = self.tensor_mapping.encode_states([state], device)
+        outputs = self.model.model(encoded_state)
+        decoded_outputs = self.tensor_mapping.decode_outputs(outputs, [state])
+        return decoded_outputs[0]

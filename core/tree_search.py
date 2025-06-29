@@ -19,10 +19,11 @@ class Node(Generic[ActionType, ValueType, PlayerType]):
         actions: Optional[List[ActionType]] = None
     ) -> None:
         if actions is None:
-            actions = self.state.get_legal_actions()
+            actions = self.state.legal_actions
         for action in actions:
             if action not in self.children:
-                new_state = self.state.apply_action(action)
+                new_state = self.state.clone()
+                new_state.apply_action(action)
                 if new_state in state_dict:
                     child = state_dict[new_state]
                 else:
@@ -73,7 +74,7 @@ class TreeSearch(Protocol[ActionType, ValueType, EvaluationType, PlayerType]):
             path = []  # List of (node, action) pairs for backpropagation
 
             # Selection
-            while not node.is_leaf() and not node.state.is_terminal():
+            while not node.is_leaf():
                 action = self.select(node)
                 path.append((node, action))
                 node = node.children[action]
@@ -81,7 +82,7 @@ class TreeSearch(Protocol[ActionType, ValueType, EvaluationType, PlayerType]):
             path.append((node, None))  # Leaf node action is None
 
             # Expansion
-            if not node.state.is_terminal():
+            if not node.state.is_terminal:
                 node.expand(state_dict=self.state_dict)
 
             # Evaluation

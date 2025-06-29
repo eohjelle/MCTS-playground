@@ -3,9 +3,12 @@ from core.state import State
 from core.tree_search import Node
 from core.types import ActionType, PlayerType
 
-class Agent(Protocol[ActionType]):
+class TreeAgent(Protocol[ActionType]):
     """Protocol for agents that can play games. TreeSearch implementations 
-    are agents, but agents don't need to use tree search.
+    are tree agents, but agents don't need to use tree search.
+
+    Tree agents are required to maintain a root node representing the current state of the game. 
+    This is convenient for functions like simulate_game.
     
     Examples: RandomAgent, AlphaZeroModelAgent.
     """
@@ -14,7 +17,7 @@ class Agent(Protocol[ActionType]):
 
     def __call__(self) -> ActionType:
         """Select an action."""
-        ...
+        ...    
     
     def update_root(self, actions: List[ActionType]) -> None:
         """Update the agent's state after actions are taken."""

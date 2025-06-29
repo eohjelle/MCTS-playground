@@ -7,7 +7,7 @@ This folder contains tools for implementing and evaluating tree search algorithm
 A barebones tree search algorithm just needs to implement the following:
 
 - `State` (defined in `state.py`): A protocol encoding a state of the game. Required methods:
-  - `get_legal_actions`: Return a list of legal actions.
+  - `legal_actions`: Return a list of legal actions.
   - `apply_action`: Apply an action to the state.
   - `is_terminal`: Return True if the game is over.
   - `get_reward`: Return the reward for the current player.
@@ -35,6 +35,12 @@ In addition, the folder contains:
 - A minimal `Agent` protocol (defined in `agent.py`) for agents that can play games compatibly with `TreeSearch`.
 - A function `benchmark` (defined in `benchmark.py`) that evaluates the performance of an agent by pitting it against other agents.
 - A file `data_structures.py` containing some dataclasses, and `types.py` containing some type variables.
+
+## Training
+
+### Tips
+
+- `create_initial_state` can not be a lambda function or a locally define function if using This is because it ne
 
 ## Implementations
 
