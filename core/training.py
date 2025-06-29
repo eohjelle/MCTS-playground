@@ -115,6 +115,11 @@ def actor_worker(
         actor_name: str,
     ):
     """Simulates games and adds training examples to the examples queue."""
+    # Set the number of threads for PyTorch operations to 1.
+    # This is crucial for preventing thread oversubscription when using multiprocessing,
+    # where each process should ideally use a single thread to avoid contention.
+    torch.set_num_threads(1)
+
     # Model initialization
     model = Model(model_architecture, model_params, device)
     model_predictor = ModelPredictor(model, tensor_mapping)
