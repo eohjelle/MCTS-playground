@@ -277,6 +277,10 @@ class Trainer(Generic[ActionType, PlayerType, ModelInitParams, TargetType]):
                 device=config.learning_device
             )
 
+        # Set multiprocessing start method to spawn. This is more reliable, for example on VMs in the cloud.
+        multiprocessing.set_start_method('spawn', force=True)
+        self.logger.info(f"Set multiprocessing start method to spawn.")
+
         # Shared model state for actor-learner communication
         self.model_lock = multiprocessing.Lock()
         self.shared_pytorch_model = config.model_architecture(**config.model_params).to(config.actor_device).share_memory()
