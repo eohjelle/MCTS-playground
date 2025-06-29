@@ -19,6 +19,7 @@ flags.DEFINE_string("model_path", None, "Path to an existing model to load")
 flags.DEFINE_string("log_level", "INFO", "Logging level")
 flags.DEFINE_integer("num_actors", 10, "Number of actors")
 flags.DEFINE_string("file_log_level", "DEBUG", "Logging level for file logging")
+flags.DEFINE_float("max_time", None, "Maximum training time in hours")
 
 def state_factory():
     game = pyspiel.load_game("connect_four")
@@ -66,13 +67,13 @@ def main(argv):
             'weight_decay': 1e-4,
             'amsgrad': False
         },
-        # lr_scheduler=torch.optim.lr_scheduler.ReduceLROnPlateau,
-        # lr_scheduler_params={
-        #     'factor': 0.5,
-        #     'patience': 1000,
-        #     'cooldown': 1000,
-        #     'min_lr': 1e-5
-        # },
+        lr_scheduler=torch.optim.lr_scheduler.ReduceLROnPlateau,
+        lr_scheduler_params={
+            'factor': 0.9,
+            'patience': 10_000,
+            'cooldown': 10_000,
+            'min_lr': 1e-5
+        },
         evaluator=StandardWinLossTieEvaluator(
             initial_state_creator=state_factory,
             opponents_creators={
@@ -86,7 +87,7 @@ def main(argv):
         evaluator_algorithm_params=AlphaZeroConfig(temperature=0.0), # Use temperature 0.0 for evaluation
         log_level=FLAGS.log_level,
         log_file_level=FLAGS.file_log_level,
-        max_training_time_hours=10.0,
+        max_training_time_hours=FLAGS.max_time,
         wandb_project="AlphaZero-ConnectFour" if FLAGS.wandb else None,
         wandb_run_name=FLAGS.name,
         resume_from_wandb_run_id=FLAGS.run_id,
