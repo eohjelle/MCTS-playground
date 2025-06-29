@@ -116,8 +116,7 @@ def actor_worker(
     ):
     """Simulates games and adds training examples to the examples queue."""
     # Set the number of threads for PyTorch operations to 1.
-    # This is crucial for preventing thread oversubscription when using multiprocessing,
-    # where each process should ideally use a single thread to avoid contention.
+    # See https://docs.pytorch.org/docs/stable/notes/multiprocessing.html#avoid-cpu-oversubscription
     torch.set_num_threads(1)
 
     # Model initialization
@@ -198,6 +197,8 @@ def evaluator_worker(
         log_file_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"],
         training_step: Synchronized,
     ):
+    torch.set_num_threads(1)
+
     # Initialize model
     model = Model(model_architecture, model_params, device)
     model.model.eval()
@@ -438,7 +439,7 @@ class Trainer(Generic[ActionType, PlayerType, ModelInitParams, TargetType]):
                 log_dict['buffer_size'] = len(self.replay_buffer)
                 total_examples_in_session += new_examples_count
                 log_dict['total_examples_in_session'] = total_examples_in_session
-                self.logger.info(f"Collected {new_examples_count} examples from actors in {log_dict['time_to_collect_examples']:.2f} s.")
+                self.logger.info(f"Collected {new_examples_count} examples from actors. Examples per second: {log_dict['examples_per_second']:.2f}.")
 
                 # Train on replay buffer
                 temp_start_time = time.time()
