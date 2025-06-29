@@ -153,7 +153,7 @@ def actor_worker(
             # Extract examples and add to list of examples using algorithm-specific extractor
             for trajectory in trajectories:
                 examples += training_adapter.extract_examples(trajectory)
-            logger.info(f"Collected {len(examples)} examples from game {game_count} in {time.time() - start_time:.2f} seconds.")
+            logger.debug(f"Collected {len(examples)} examples from game {game_count} in {time.time() - start_time:.2f} seconds.")
         except Exception as e:
             logger.error(f"Error in game {game_count}: {e}", exc_info=True)
             time.sleep(60.0)
