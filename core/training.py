@@ -398,6 +398,7 @@ class Trainer(Generic[ActionType, PlayerType, ModelInitParams, TargetType]):
         """
         config = self.config
         processes = []
+        last_examples_time = start_time = time.time()
 
         try:
             # Initialize actor processes
@@ -415,7 +416,7 @@ class Trainer(Generic[ActionType, PlayerType, ModelInitParams, TargetType]):
 
             # Start main training loop
             self.logger.info("Starting main training loop..." if self.training_step.value == 0 else f"Resuming training from step {self.training_step.value + 1}...")
-            last_checkpoint_time = last_examples_time = start_time = time.time()
+            last_checkpoint_time = time.time()
             log_dict = {}
             total_examples_in_session = 0
             for step in itertools.count(self.training_step.value + 1):
@@ -439,7 +440,7 @@ class Trainer(Generic[ActionType, PlayerType, ModelInitParams, TargetType]):
                 log_dict['buffer_size'] = len(self.replay_buffer)
                 total_examples_in_session += new_examples_count
                 log_dict['total_examples_in_session'] = total_examples_in_session
-                self.logger.info(f"Collected {new_examples_count} examples from actors. Examples per second: {log_dict['examples_per_second']:.2f}.")
+                self.logger.info(f"Collected {new_examples_count} new examples from actors. Rate of new examples: {log_dict['examples_per_second']:.2f} examples/s.")
 
                 # Train on replay buffer
                 temp_start_time = time.time()

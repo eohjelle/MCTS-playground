@@ -18,6 +18,7 @@ flags.DEFINE_string("buffer_path", None, "Path to an existing replay buffer to l
 flags.DEFINE_string("model_path", None, "Path to an existing model to load")
 flags.DEFINE_string("log_level", "INFO", "Logging level")
 flags.DEFINE_integer("num_actors", 10, "Number of actors")
+flags.DEFINE_string("file_log_level", "DEBUG", "Logging level for file logging")
 
 def state_factory():
     game = pyspiel.load_game("connect_four")
@@ -84,7 +85,7 @@ def main(argv):
         ),
         evaluator_algorithm_params=AlphaZeroConfig(temperature=0.0), # Use temperature 0.0 for evaluation
         log_level=FLAGS.log_level,
-        log_file_level="DEBUG",
+        log_file_level=FLAGS.file_log_level,
         max_training_time_hours=10.0,
         wandb_project="AlphaZero-ConnectFour" if FLAGS.wandb else None,
         wandb_run_name=FLAGS.name,
