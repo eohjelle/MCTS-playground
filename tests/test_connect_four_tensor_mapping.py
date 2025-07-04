@@ -87,7 +87,7 @@ class TestConnectFourTensorMapping(unittest.TestCase):
         self.assertTrue(torch.allclose(policy_target, expected_policy))
 
         # Check value target
-        self.assertEqual(value_target.shape, (1, 1))
+        self.assertEqual(value_target.shape, (1,))
         self.assertAlmostEqual(value_target.item(), value)
 
         # Check legal actions mask

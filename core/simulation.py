@@ -18,9 +18,10 @@ def simulate_game(
     while True:
         logger.debug(f"Game state:\n{state}")
         # Add rewards to last play
+        rewards = state.rewards()
         for player in trajectories:
             if len(trajectories[player]) > 0: # If player has moved
-                trajectories[player][-1].reward += state.rewards[player]
+                trajectories[player][-1].reward += rewards[player]
         if state.is_terminal:
             logger.debug(f"Game terminal state reached.")
             return list(trajectories.values())

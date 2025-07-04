@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 from typing import Dict, List, Optional, Tuple, Generic
 import torch
@@ -18,13 +18,14 @@ from .utils import temperature_adjusted_policy, sample_from_policy
 class AlphaZeroValue[ActionType, PlayerType]:
     """Value stored in a node of the tree search."""
     prior_policy: Dict[ActionType, float]  # Prior probability from neural network
-    total_value: Dict[PlayerType, float] # Sum of values from all visits for each player
+    total_value: Dict[PlayerType, float] = field(default_factory=dict) # Sum of values from all visits for each player
     visit_count: int = 0  # Number of times this node has been visited
     has_dirichlet_noise: bool = False # Whether Dirichlet noise has been added to the prior policy
 
     def mean_value(self, player: PlayerType) -> float:
         """Mean value from all visits for a given player."""
-        return self.total_value.get(player, 0.0) / self.visit_count
+        assert self.visit_count > 0, "Cannot compute mean value for a node with no visits"
+        return self.total_value[player] / self.visit_count
 
 # Type alias for the output of the model predictor: (policy probabilities, values from each player's perspective), exactly what is stored in the AlphaZeroValue class.
 # Typically, the model itself only predicts the value for the current player, which for two player zero sum games uniquely determines the value from the other player's perspective.
@@ -106,30 +107,36 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation, Play
         For non-terminal nodes, a model predictor is used.
         """
         if node.state.is_terminal:
-            return {}, node.state.rewards
-        
+            return {}, node.state.rewards()
+
         return self._model_predictor(node.state)
+
     
     def update(self, node: Node[ActionType, AlphaZeroValue, PlayerType], action: Optional[ActionType], evaluation: AlphaZeroEvaluation) -> None:
         """Update a node's statistics."""
-        policy, Qvalues = evaluation
+        policy, q_values = evaluation
 
-        if action is None: # Leaf node, first visit
-            node.value = AlphaZeroValue(prior_policy=policy, total_value=Qvalues)
+        if node.value is None: # Leaf node, first visit
+            node.value = AlphaZeroValue(
+                prior_policy=policy,
+                total_value={player: 0.0 for player in node.state.players} # Updated below
+            )
 
         assert node.value is not None, "Node value is None"
         node.value.visit_count += 1
-        for player in self.players:
-            node.value.total_value[player] += Qvalues[player]
+        for player in node.state.players:
+            node.value.total_value[player] += q_values[player]
 
-    def full_policy(self, node: Node[ActionType, AlphaZeroValue, PlayerType]) -> Dict[ActionType, float]:
-        """Return the full policy for a node."""
-        visits = {action: float(child.value.visit_count if child.value else 0) for action, child in node.children.items()}
-        return temperature_adjusted_policy(visits, self._temperature)
+    def full_policy(self) -> Dict[ActionType, float]:
+        """Return the full policy for the root node."""
+        visits = {action: float(child.value.visit_count if child.value else 0) for action, child in self.root.children.items()}
+        full_policy = temperature_adjusted_policy(visits, self._temperature)
+
+        return full_policy
     
-    def policy(self, node: Node[ActionType, AlphaZeroValue, PlayerType]) -> ActionType:
+    def policy(self) -> ActionType:
         """Select an action according to the full policy."""
-        return sample_from_policy(self.full_policy(node))
+        return sample_from_policy(self.full_policy())
 
     def add_dirichlet_noise(self, node: Node) -> None:
         """Add Dirichlet noise to root node for exploration during self-play.
@@ -150,7 +157,7 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation, Play
         # Mix with original priors
         for action, noise_val in zip(actions, noise):
             original = node.value.prior_policy[action]
-            node.value.prior_policy[action] = (
+            node.value.prior_policy[action] = float(
                 (1 - self._dirichlet_epsilon) * original + 
                 self._dirichlet_epsilon * noise_val
             )
@@ -160,11 +167,10 @@ class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation, Play
 class AlphaZeroTrainingAdapter(TrainingAdapter[ActionType, AlphaZeroEvaluation]):
     """Training adapter for AlphaZero."""
 
-    def __init__(self, value_softness: float = 0.0, mask_value: float = -1e8):
+    def __init__(self, value_softness: float = 0.0, mask_value: float = -1e4):
         """Initialize AlphaZero training adapter.
         
         Args:
-            params: AlphaZero configuration parameters
             value_softness: Controls mixing of game outcome with neural network value estimates
                           for training targets. Default 0.0 matches original AlphaZero paper
                           where training values are purely the game outcomes (win/loss/draw).
@@ -175,6 +181,7 @@ class AlphaZeroTrainingAdapter(TrainingAdapter[ActionType, AlphaZeroEvaluation])
         self.value_softness = value_softness
 
         # The mask should be a large negative number. Warning: Setting it to -inf will cause NaNs in the loss.
+        # We use a moderately large value like -1e4 to avoid overflow issues with float16 autocasting.
         # The original literature on AlphaZero does not specify masking in detail, so we follow the recommendation of this paper: https://arxiv.org/pdf/2006.14171
         self.mask_value = mask_value
 
@@ -261,12 +268,10 @@ class AlphaZeroModelAgent(TreeAgent[ActionType]):
             self, 
             initial_state: State[ActionType, PlayerType], 
             model: ModelPredictor[ActionType, AlphaZeroEvaluation],
-            tensor_mapping: TensorMapping[ActionType, AlphaZeroEvaluation],
             temperature: float = 0.0
         ):
         self.root = Node(state=initial_state, value=None)
         self.model = model
-        self.tensor_mapping = tensor_mapping
         self.temperature = temperature
         self.state_dict = {self.root.state: self.root}
 

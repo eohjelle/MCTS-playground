@@ -54,8 +54,8 @@ class TreeSearch(Protocol[ActionType, ValueType, EvaluationType, PlayerType]):
         ...
     
     @abstractmethod
-    def policy(self, node: Node[ActionType, ValueType, PlayerType]) -> ActionType:
-        """Select the best action at a node according to the search results."""
+    def policy(self) -> ActionType:
+        """Select the best action at the root node according to the search results."""
         ...
     
     def __call__(self) -> ActionType:
@@ -70,6 +70,7 @@ class TreeSearch(Protocol[ActionType, ValueType, EvaluationType, PlayerType]):
             self.update(self.root, None, evaluation)
 
         for _ in range(self.num_simulations):
+
             node = self.root
             path = []  # List of (node, action) pairs for backpropagation
 
@@ -92,12 +93,12 @@ class TreeSearch(Protocol[ActionType, ValueType, EvaluationType, PlayerType]):
             for node, action in reversed(path):
                 self.update(node, action, evaluation)
         
-        return self.policy(self.root)
+        return self.policy()
     
     def update_root(self, actions: List[ActionType]) -> None:
-        """Update the root node after committing to actions."""
+        """Update the root node after committing to a sequence of actions."""
         for action in actions:
-            self.root.expand(state_dict=self.state_dict, actions=[action]) # May have to change this or handle unexpanded node if we want to reanalyze
+            self.root.expand(state_dict=self.state_dict, actions=[action])
             self.root = self.root.children[action]
 
     def set_root(self, state: State[ActionType, PlayerType]) -> None:

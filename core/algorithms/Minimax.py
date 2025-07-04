@@ -15,7 +15,7 @@ class MinimaxValue(Generic[ActionType, PlayerType]):
 
 class Minimax(TreeAgent[ActionType], Generic[ActionType]):
     """
-    Simple Minimax algorithm, without any pruning.
+    Simple Minimax algorithm for two-player zero-sum games, without any pruning.
 
     Currently no max depth, so only viable for small games like TicTacToe.
     """
@@ -26,21 +26,21 @@ class Minimax(TreeAgent[ActionType], Generic[ActionType]):
     def evaluate(self, node: Node[ActionType, MinimaxValue, Any]) -> MinimaxValue:
         if node.value is not None: # already evaluated
             return node.value
-        if node.state.is_terminal:
-            value = MinimaxValue(value=node.state.rewards[node.state.current_player], best_actions=[], player=node.state.current_player)
-        else:
-            node.expand(state_dict=self.state_dict)
-            max_value = float('-inf')
-            best_actions = []
-            for action, child in node.children.items():
-                sign = 1 if node.state.current_player == child.state.current_player else -1
-                child_value = sign * self.evaluate(child).value
-                if child_value > max_value:
-                    max_value = child_value
-                    best_actions = [action]
-                elif child_value == max_value:
-                    best_actions.append(action)
-            value = MinimaxValue(value=max_value, best_actions=best_actions, player=node.state.current_player)
+        node.expand(state_dict=self.state_dict)
+        max_value = float('-inf')
+        best_actions = []
+        for action, child in node.children.items():
+            if child.state.is_terminal:
+                child_value = child.state.rewards()[node.state.current_player]
+            else:
+                sign = 1 if node.state.current_player == child.state.current_player else -1 # Some games have repeated moves
+                child_value = sign * self.evaluate(child).value # Two player zero sum game
+            if child_value > max_value:
+                max_value = child_value
+                best_actions = [action]
+            elif child_value == max_value:
+                best_actions.append(action)
+        value = MinimaxValue(value=max_value, best_actions=best_actions, player=node.state.current_player)
         node.value = value
         return value
     

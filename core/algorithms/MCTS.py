@@ -57,7 +57,7 @@ class MCTS(TreeSearch[ActionType, MCTSValue, Tuple[MCTSValue, Dict[PlayerType, f
         """Evaluate a state using random rollouts. Returns average rewards for each player."""
         
         if node.state.is_terminal:
-            return node.state.rewards
+            return node.state.rewards()
 
         total_returns = {}
         for _ in range(self.num_rollouts):
@@ -68,7 +68,7 @@ class MCTS(TreeSearch[ActionType, MCTSValue, Tuple[MCTSValue, Dict[PlayerType, f
                 current_state.apply_action(action)
             
             # Accumulate returns for all players
-            rollout_returns = current_state.rewards
+            rollout_returns = current_state.rewards()
             for player, return_value in rollout_returns.items():
                 total_returns[player] = total_returns.get(player, 0.0) + return_value
         
@@ -87,11 +87,12 @@ class MCTS(TreeSearch[ActionType, MCTSValue, Tuple[MCTSValue, Dict[PlayerType, f
         for player, return_value in evaluation.items():
             node.value.total_value[player] += return_value
 
-    def full_policy(self, node: Node[ActionType, MCTSValue, PlayerType]) -> Dict[ActionType, float]:
-        """Return the full policy for a node."""
-        visits = {action: float(child.value.visit_count if child.value else 0) for action, child in node.children.items()}
-        return temperature_adjusted_policy(visits, self.temperature)
+    def full_policy(self) -> Dict[ActionType, float]:
+        """Return the full policy for the root node."""
+        visits = {action: float(child.value.visit_count if child.value else 0) for action, child in self.root.children.items()}
+        full_policy = temperature_adjusted_policy(visits, self.temperature)
+        return full_policy
     
-    def policy(self, node: Node[ActionType, MCTSValue, PlayerType]) -> ActionType:
+    def policy(self) -> ActionType:
         """Select an action according to the full policy."""
-        return sample_from_policy(self.full_policy(node))
+        return sample_from_policy(self.full_policy())

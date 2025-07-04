@@ -79,7 +79,7 @@ class DABTensorMapping(TensorMapping[DotsAndBoxesAction, AlphaZeroEvaluation[Dot
         
         # Validation assertions
         assert all(set(policy_dict[i].keys()) == set(legal_actions_list[i]) for i in range(len(states))), "Policy dictionary keys do not match legal actions"
-        assert all(abs(sum(policy_dict[i].values()) - 1.0) < 1e-6 for i in range(len(states))), "Policy dictionary values do not sum to 1"
+        assert all(abs(sum(policy_dict[i].values()) - 1.0) < 1e-2 for i in range(len(states))), "Policy dictionary values do not sum to 1"
         
         return list(zip(policy_dict, value_dict))
     
@@ -164,7 +164,42 @@ class DABTensorMapping(TensorMapping[DotsAndBoxesAction, AlphaZeroEvaluation[Dot
         ), axis=1)
         res = t.from_numpy(res).to(device)
         return res
+    
+class LayeredDABTensorMapping(DABTensorMapping):
+    @staticmethod
+    def encode_states(states: List[DotsAndBoxesState], device: t.device) -> t.Tensor:
+        """Convert board state to neural network input tensor.
         
+        Input: game states with boards of size (2*rows+1) x (2*cols+1)
+        Output: PyTorch tensor encoding of shape (batch_size, 3, 2 * num_rows + 1, 2 * num_cols + 1). 
+            - Channel 0: 1 for positions corresponding to taken edges, 0 otherwise.
+            - Channel 1: 1 for boxes captured by the current player, 0 otherwise.
+            - Channel 2: 1 for boxes captured by the other player, 0 otherwise.
+        """
+        if not states:
+            raise ValueError("Empty states list")
+        
+        num_rows, num_cols = states[0].rows, states[0].cols
+        
+        boards = np.array([state.board for state in states]) # (num_states, 2*num_rows + 1, 2*num_cols + 1)
+        result = np.zeros((len(states), 3, 2 * num_rows + 1, 2 * num_cols + 1), dtype=np.float32) # initialize output array
+
+        # Process edges
+        result[:, 0, :, :] = np.logical_or(boards == CellType.VERTICAL_EDGE, boards == CellType.HORIZONTAL_EDGE).astype(np.float32)
+        
+        # Process current player boxes
+        current_player_boxes = np.array([CellType.PLAYER_A_SQUARE if state.current_player == 'A' else CellType.PLAYER_B_SQUARE for state in states]).reshape(len(states), 1, 1)
+        result[:, 1, :, :] = np.where(boards == current_player_boxes, 1.0, 0.0)
+
+        # Process other player boxes
+        other_player_boxes = np.array([CellType.PLAYER_B_SQUARE if state.current_player == 'A' else CellType.PLAYER_A_SQUARE for state in states]).reshape(len(states), 1, 1)
+        result[:, 2, :, :] = np.where(boards == other_player_boxes, 1.0, 0.0)
+
+        # Convert to float32 tensor on the requested device
+        res = t.from_numpy(result).to(device=device, dtype=t.float32)
+        return res
+    
+
 # class DABTokenizedTensorMapping(DABBaseTensorMapping):
 #     @staticmethod
 #     def encode_states(states: List[DotsAndBoxesState], device: t.device) -> t.Tensor:

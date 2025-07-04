@@ -205,7 +205,6 @@ class DotsAndBoxesState(State[DotsAndBoxesAction, DotsAndBoxesPlayer]):
         """Number of moves left in game."""
         return len(self.legal_actions)
     
-    @property
     def rewards(self) -> Dict[DotsAndBoxesPlayer, float]:
         """Return rewards based on final scores."""
         if not self.is_terminal:

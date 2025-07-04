@@ -1,5 +1,5 @@
 from typing import Tuple, Optional
-from core import Agent
+from core import TreeAgent, ModelPredictor, Model
 from core.algorithms import AlphaZero, AlphaZeroModelAgent, AlphaZeroConfig, MCTS, MCTSConfig, Minimax, RandomAgent
 from core.games.tic_tac_toe import TicTacToeState
 from .models.mlp_model import TicTacToeMLP
@@ -46,22 +46,37 @@ def create_agent(
     Returns:
         The created agent, or None if agent_type is 'human'
     """
-    if agent_type == 'human':
-        return None
-    elif agent_type == 'mcts':
-        return MCTS(initial_state, config=MCTSConfig(num_simulations=100))
-    elif agent_type == 'random':
-        return RandomAgent(initial_state)
-    elif agent_type == 'minimax':
-        return Minimax(initial_state)
-    else:  # alphazero or model
-        # Get model type
-        while True:
-            model_type = input("Choose model type (mlp/transformer/experimental_transformer/linear_attention): ").lower()
-            if model_type in ['mlp', 'transformer', 'experimental_transformer', 'linear_attention']:
-                break
-            print("Please enter mlp, transformer, experimental_transformer, or linear_attention")
-
+    model_path = "checkpoints/tic_tac_toe/"
+    match agent_type:
+        case 'human':
+            return None
+        case 'mcts':
+            return MCTS(initial_state, config=MCTSConfig(num_simulations=100))
+        case 'random':
+            return RandomAgent(initial_state)
+        case 'minimax':
+            return Minimax(initial_state)
+        case 'alphazero':
+            return AlphaZero(
+                initial_state=initial_state,
+                model_predictor=ModelPredictor.from_file(
+                    
+                ),
+                params=AlphaZeroConfig(
+                    num_simulations=50,
+                    exploration_constant=1.25,
+                    dirichlet_alpha=1.0,
+                    dirichlet_epsilon=0.0,
+                    temperature=0.0
+                )
+            )
+        case 'alphazero_model':
+            return AlphaZeroModelAgent(
+                initial_state=initial_state,
+                model=model,
+                tensor_mapping=MLPTensorMapping()
+        case _:
+            raise ValueError(f"Invalid agent type: {agent_type}")
         # Setup model
         match model_type:
             case 'mlp':
@@ -99,9 +114,9 @@ def create_agent(
                     initial_state=initial_state,
                     model_predictor=model,
                     params=AlphaZeroConfig(
-                        num_simulations=100,
-                        exploration_constant=1.414,
-                        dirichlet_alpha=0.0,
+                        num_simulations=50,
+                        exploration_constant=1.25,
+                        dirichlet_alpha=1.0,
                         dirichlet_epsilon=0.0,
                         temperature=0.0
                     )

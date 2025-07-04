@@ -52,6 +52,7 @@ class TrainerConfig(Generic[ActionType, ModelInitParams, PlayerType, TargetType]
     # Learner
     learning_batch_size: int = 32
     learning_min_new_examples_per_step: int = 1024
+    learning_min_seconds_per_step: float = 0.0 # Min seconds per step through main loop
     learning_fraction_of_buffer_per_step: float = 1.0 # Fraction of buffer examples to use per step through main loop
     learning_min_buffer_size: int = 10_000
     learning_device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu')
@@ -66,6 +67,7 @@ class TrainerConfig(Generic[ActionType, ModelInitParams, PlayerType, TargetType]
     wandb_run: Run | None = None # If not None, will log to this run.
     wandb_project: str | None = None # If wandb_run is None and this is not None, will create a new run in this project.
     wandb_run_name: str | None = None # If wandb_run is None and wandb_project is not None, will give the run this name.
+    wandb_run_id: str | None = None # Will attempt to resume from this run id.
     wandb_use_watch: bool = True # Whether to watch model parameters and gradients
     wandb_watch_log_level: Literal["all", "gradients", "parameters"] = "all" # If watch_model is True, this is the level of detail to log
     wandb_watch_log_freq: int | None = None # If watch_model is True, this is the log frequency for model parameters. If None, will be set to int(learning_min_buffer_size * learning_fraction_of_buffer_examples_per_iteration / learning_batch_size)
@@ -80,7 +82,7 @@ class TrainerConfig(Generic[ActionType, ModelInitParams, PlayerType, TargetType]
     
     # Misc
     max_training_steps: int | None = None
-    max_training_time_hours: float | None = 1.0 # If set, training will stop after this many hours.
+    max_training_time_hours: float | None = None # If set, training will stop after this many hours.
 
     # Checkpointing
     checkpoint_frequency_hours: float | None = 0.5 # Min hours between checkpoints
@@ -89,7 +91,7 @@ class TrainerConfig(Generic[ActionType, ModelInitParams, PlayerType, TargetType]
     # Resuming. Resuming from checkpoint will override load_model_from_path and load_replay_buffer_from_path.
     load_model_from_path: str | None = None # If not None, __init__ will load model from this path.
     load_replay_buffer_from_path: str | None = None # If not None, __init__ will load replay buffer from this path.
-    resume_from_wandb_run_id: str | None = None # If not None, __init__ will attempt to resume from wandb run with this id.
+    resume_from_wandb_checkpoint: str | None = None # If not None, __init__ will attempt to resume from wandb run with this id.
     resume_from_checkpoint_path: str | None = None # If provided and not resuming from wandb_run, __init__ will attempt to load checkpoint from this path.
     resume_from_last_checkpoint: bool = False # If True, not resuming from wandb_run, and not resuming from checkpoint_path, __init__ will attempt to load checkpoint from checkpoint_dir/checkpoint.pt
 
@@ -229,7 +231,7 @@ def evaluator_worker(
             stats.update(eval_stats)
             evaluator_stats_queue.put(stats)
             stats['time_to_evaluate'] = time.time() - start_time
-            log_message = f"Completed evaluation {evaluation_count} in {stats['time_to_evaluate']:.2f} seconds:"
+            log_message = f"Completed evaluation {evaluation_count} of training step {stats['training_step']} model in {stats['time_to_evaluate']:.2f} seconds:"
             for opponent, results in eval_stats.items():
                 log_message += f"\n    {opponent}: "
                 log_message += ", ".join([f"{name}: {value:.4f}" for name, value in results.items()])
@@ -312,12 +314,12 @@ class Trainer(Generic[ActionType, PlayerType, ModelInitParams, TargetType]):
                     project=config.wandb_project,
                     name=config.wandb_run_name,
                     config=asdict(config),
-                    resume="must" if config.resume_from_wandb_run_id is not None else None,
-                    id=config.resume_from_wandb_run_id
+                    resume="must" if config.wandb_run_id is not None else None,
+                    id=config.wandb_run_id
                 )
                 self.logger.info(f"Initialized wandb run {self.wandb_run.project}/{self.wandb_run.name} with id {self.wandb_run.id}.")
             except Exception as e:
-                self.logger.error(f"Error initializing wandb run with settings config.wandb_project={config.wandb_project}, config.wandb_run_name={config.wandb_run_name}, config.resume_from_wandb_run_id={config.resume_from_wandb_run_id}: {e}", exc_info=True)
+                self.logger.error(f"Error initializing wandb run with settings config.wandb_project={config.wandb_project}, config.wandb_run_name={config.wandb_run_name}, config.wandb_run_id={config.wandb_run_id}: {e}", exc_info=True)
                 self.wandb_run = None
         else:
             self.wandb_run = None
@@ -336,7 +338,7 @@ class Trainer(Generic[ActionType, PlayerType, ModelInitParams, TargetType]):
 
         # Try to resume from checkpoint if specified, prioritizing resuming from wandb run
         checkpoint = None
-        if config.resume_from_wandb_run_id is not None:
+        if config.resume_from_wandb_checkpoint is not None:
             try:
                 assert self.wandb_run is not None, "Wandb run failed to initialize, so cannot resume from wandb run."
                 artifact = self.wandb_run.use_artifact(f'{self.wandb_run.name}_checkpoint:latest')
@@ -344,27 +346,24 @@ class Trainer(Generic[ActionType, PlayerType, ModelInitParams, TargetType]):
                 self.logger.info(f"Loaded checkpoint from wandb run {self.wandb_run.name}.")
             except Exception as e:
                 self.logger.error(f"Failed to load checkpoint using artifact from wandb run: {e}", exc_info=True)
-                checkpoint = None
+                raise e
         if checkpoint is None and config.resume_from_checkpoint_path is not None:
-            if os.path.exists(config.resume_from_checkpoint_path):
-                try:
-                    checkpoint = torch.load(config.resume_from_checkpoint_path, map_location=config.learning_device)
-                    self.logger.info(f"Loaded checkpoint from {self.checkpoint_path}.")
-                except Exception as e:
-                    self.logger.error(f"Error loading checkpoint from file: {e}", exc_info=True)
-                    checkpoint = None
-            else:
-                self.logger.warning(f"Config attribute resume_from_checkpoint_path={config.resume_from_checkpoint_path} but checkpoint file not found at {config.resume_from_checkpoint_path}.")
+            try:
+                checkpoint = torch.load(config.resume_from_checkpoint_path, map_location=config.learning_device)
+                self.logger.info(f"Loaded checkpoint from {self.checkpoint_path}.")
+            except Exception as e:
+                self.logger.error(f"Error loading checkpoint from file: {e}", exc_info=True)
+                raise e
         if checkpoint is None and config.resume_from_last_checkpoint:
             if os.path.exists(self.checkpoint_path):
                 try:
                     checkpoint = torch.load(self.checkpoint_path, map_location=config.learning_device)
                     self.logger.info(f"Loaded checkpoint from {self.checkpoint_path}.")
                 except Exception as e:
-                    self.logger.error(f"Error loading checkpoint from file: {e}", exc_info=True)
-                    checkpoint = None
+                    self.logger.error(f"Error loading checkpoint from file: {e}.", exc_info=True)
+                    raise e
             else:
-                self.logger.warning(f"Config attribute resume_from_last_checkpoint=True but checkpoint file not found at {self.checkpoint_path}. Training will start from scratch.")
+                self.logger.warning(f"No checkpoint found at {self.checkpoint_path}. Training will start from scratch.")
         if checkpoint is not None:
             try:
                 self._load_checkpoint(checkpoint)
@@ -380,6 +379,7 @@ class Trainer(Generic[ActionType, PlayerType, ModelInitParams, TargetType]):
 
     def _train_batch(self):
         """Train model on a batch. Returns a dictionary of metrics."""
+        # TODO: Instead of sampling batches, divide buffer into batches and train on each batch.
         states, targets, extra_data = self.replay_buffer.sample(self.config.learning_batch_size)
         self.model.model.train()
         # autocast is a context manager that enables automatic mixed precision.
@@ -413,10 +413,11 @@ class Trainer(Generic[ActionType, PlayerType, ModelInitParams, TargetType]):
                 evaluator_stats_queue = multiprocessing.Queue()
                 evaluator_process = self._run_evaluator_subprocess(evaluator_stats_queue)
                 processes.append(evaluator_process)
+                time.sleep(3.0) # Some time for evaluator to start initial evaluation at step 0
 
             # Start main training loop
             self.logger.info("Starting main training loop..." if self.training_step.value == 0 else f"Resuming training from step {self.training_step.value + 1}...")
-            last_checkpoint_time = time.time()
+            last_checkpoint_time = last_step_time = time.time()
             log_dict = {}
             total_examples_in_session = 0
             for step in itertools.count(self.training_step.value + 1):
@@ -479,7 +480,7 @@ class Trainer(Generic[ActionType, PlayerType, ModelInitParams, TargetType]):
                 if self.wandb_run is not None:
                     try:
                         log_dict['training_step'] = step
-                        self.wandb_run.log(log_dict, step=step)
+                        self.wandb_run.log(log_dict)
                         self.logger.info(f"Logged metrics to wandb")
                     except Exception as e:
                         self.logger.error(f"Error logging metrics to wandb: {e}", exc_info=True)
@@ -490,7 +491,7 @@ class Trainer(Generic[ActionType, PlayerType, ModelInitParams, TargetType]):
                     and self.wandb_run is not None:
                     try:
                         eval_stats = evaluator_stats_queue.get_nowait()
-                        self.wandb_run.log(eval_stats, step=step)
+                        self.wandb_run.log(eval_stats)
                         self.logger.info(f"Logged evaluator stats to wandb")
                     except Exception as e:
                         self.logger.error(f"Error collecting stats from evaluator: {e}", exc_info=True)
@@ -512,6 +513,13 @@ class Trainer(Generic[ActionType, PlayerType, ModelInitParams, TargetType]):
                 if config.max_training_time_hours is not None and time.time() - start_time > config.max_training_time_hours * 3600:
                     self.logger.info(f"Reached maximum training time ({config.max_training_time_hours} hours).")
                     break
+
+                # Check if we have reached the minimum seconds per step
+                if time.time() - last_step_time < config.learning_min_seconds_per_step:
+                    sleep_time = max(0.0, config.learning_min_seconds_per_step - (time.time() - last_step_time))
+                    self.logger.debug(f"Have not reached minimum seconds per step ({config.learning_min_seconds_per_step} seconds). Sleeping for {sleep_time:.2f} seconds...")
+                    time.sleep(sleep_time)
+                last_step_time = time.time()
 
         except KeyboardInterrupt:
             self.logger.warning(f"Training interrupted by user.")

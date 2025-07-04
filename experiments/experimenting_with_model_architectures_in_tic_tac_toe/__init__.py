@@ -1,4 +1,4 @@
-from ...core.games.tic_tac_toe import TicTacToeState, TicTacToeAction
+from core.games.tic_tac_toe import TicTacToeState, TicTacToeAction
 from .tensor_mapping import MLPTensorMapping, TokenizedTensorMapping
 from .models.experimental_transformer import TicTacToeExperimentalTransformer, ExperimentalTransformerInitParams
 from .models.transformer_model import TicTacToeTransformer, TransformerInitParams

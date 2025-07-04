@@ -24,17 +24,15 @@ class ResidualBlock(nn.Module):
         return out
 
 class ResMLPInitParams(TypedDict):
-    input_dim: int
     num_residual_blocks: int
     residual_dim: int
     hidden_size: int
-    policy_head_dim: int
 
 class ResMLP(nn.Module):
-    def __init__(self, input_dim: int, num_residual_blocks: int, residual_dim: int, hidden_size: int, policy_head_dim: int):
+    def __init__(self, num_residual_blocks: int, residual_dim: int, hidden_size: int):
         super().__init__()
         
-        self.input_layer = nn.Linear(input_dim, residual_dim)
+        self.input_layer = nn.Linear(18, residual_dim)
         self.relu = nn.ReLU()
         
         self.residual_layers = nn.ModuleList(
@@ -42,7 +40,7 @@ class ResMLP(nn.Module):
         )
         
         self.final_norm = nn.LayerNorm(residual_dim)
-        self.policy_head = nn.Linear(residual_dim, policy_head_dim)
+        self.policy_head = nn.Linear(residual_dim, 9)
         self.value_head = nn.Linear(residual_dim, 1)
 
     def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:

@@ -68,11 +68,11 @@ class BaseTensorMapping(TensorMapping[Tuple[int, int], AlphaZeroEvaluation]):
 
         # Convert legal actions to a tensor mask
         legal_actions_list = [example.extra_data["legal_actions"] for example in examples]
-        legal_actions = torch.zeros(len(examples), 9, device=device, dtype=torch.float32)
+        legal_actions = torch.empty(len(examples), 9, device=device, dtype=torch.bool)
         for i, legal_actions_list in enumerate(legal_actions_list):
             for action in legal_actions_list:
                 idx = action[0] * 3 + action[1]
-                legal_actions[i][idx] = 1
+                legal_actions[i][idx] = True
 
         return {
             "policy": policy,

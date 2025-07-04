@@ -88,12 +88,12 @@ class ConnectFourTensorMapping(TensorMapping[int, AlphaZeroEvaluation[int, int]]
         _, _, num_cols = ConnectFourTensorMapping.get_game_info(states)
 
         policy_targets = torch.zeros(len(examples), num_cols, device=device)
-        value_targets = torch.zeros(len(examples), 1, device=device)
+        value_targets = torch.zeros(len(examples), device=device)
         legal_actions_mask = torch.zeros(len(examples), num_cols, device=device, dtype=torch.bool)
 
         for i, example in enumerate(examples):
             policy_dict, value = example.target
-            value_targets[i, 0] = value
+            value_targets[i] = value
             for action, prob in policy_dict.items():
                 policy_targets[i, action] = prob
 
@@ -108,3 +108,20 @@ class ConnectFourTensorMapping(TensorMapping[int, AlphaZeroEvaluation[int, int]]
         }, {
             "legal_actions": legal_actions_mask
         }
+
+
+class LayeredConnectFourTensorMapping(ConnectFourTensorMapping):
+    """Tensor mapping compatible with Connect 4 (via OpenSpielState) and AlphaZero, but with a layered encoding."""
+
+    @staticmethod
+    def encode_states(states: List[OpenSpielState], device: torch.device) -> torch.Tensor:
+        num_planes, num_rows, num_cols = ConnectFourTensorMapping.get_game_info(states)
+        result = torch.zeros(len(states), 2, num_rows, num_cols, dtype=torch.float32, device=device)
+        for i, state in enumerate(states):
+            obs = torch.tensor(state.spiel_state.observation_tensor(), device=device, dtype=torch.float32).reshape(num_planes, num_rows, num_cols)
+            if state.current_player == 0:
+                result[i] = obs[:2]
+            else:
+                result[i][0] = obs[1]
+                result[i][1] = obs[0]
+        return result
