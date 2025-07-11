@@ -43,7 +43,7 @@ python -m experiments.connect_four.play
 
 To train a new model from scratch via self play and wandb logging:[^1]
 
-[^1]: Requires a wandb account, run without the `--wandb` flag to disable.
+[^1]: Requires a wandb account. Run without the `--wandb` flag to disable.
 
 ```bash
 python -m experiments.connect_four.train --name="My training run" --wandb --num_actors=10
