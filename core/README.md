@@ -19,7 +19,7 @@ A more general `TreeAgent` protocol can be found in `agent.py`, which is any gam
 
 All game playing agents interact with games via the `State` protocol, found in `state.py`, which can encode most turn-based games. Implementations of several games can be found in `games`, including a wrapper for OpenSpiel games.
 
-### Deep learning integration
+### Deep RL
 
 Where the code gets more intricate is when deep learning models are integrated into the algorithms. General abstractions for PyTorch models are defined in `model_interface.py`, where the main added value consists of methods to save and load models from file. More importantly:
 

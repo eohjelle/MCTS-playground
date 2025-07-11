@@ -33,15 +33,19 @@ Let $f_\theta$ represent the deep learning model for weights $\theta$. For an in
 
 AlphaZero implements the abstract MCTS template as follows:
 
-1. **Selection**: Selection of the next edge is done according to a PUCT rule $$ a^k = \operatorname{argmax}\_a Q(s^k, a) + U(s^k, a) , $$ where $U(s, a)$ is a function that boosts under-explored edges proportionally to the prior probability $P(s, a)$. Specifically, some candidates for $U(s, a)$ are $$\begin{aligned} & U(s, a) = P(s, a) \frac{\sqrt{\sum_b N(s, b)}}{1 + N(s, a)} c & \text{(used in AlphaGo Zero), } \\ & U(s, a) = P(s, a) \frac{\sqrt{\sum_b N(s, b)}}{1 + N(s, a)} \left( c_1 + \log \left( \frac{\sum_b N(s, b) + c_2 + 1}{c_2} \right) \right) & \text{(used in MuZero), } \end{aligned}$$ where $c, c_1, c_2$ are constants. For example, $c_1 = 1.25$ and $c_2 = 19652$ in [MuZero](https://arxiv.org/abs/1911.08265) (see page 12). The implementation in this repository uses the first formula with default value $c=1.25$.
+1. **Selection**: Selection of the next edge is done according to a PUCT rule $$ a^k = \operatorname{argmax}\_a Q(s^k, a) + U(s^k, a) , $$ where $U(s, a)$ is a function that boosts under-explored edges proportionally to the prior probability $P(s, a)$. Specifically, some candidates for $U(s, a)$ are
+   $$ U(s, a) = P(s, a) \frac{\sqrt{\sum_b N(s, b)}}{1 + N(s, a)} c \text{(used in AlphaGo Zero), }$$
+   $$ U(s, a) = P(s, a) \frac{\sqrt{\sum_b N(s, b)}}{1 + N(s, a)} \left( c_1 + \log \left( \frac{\sum_b N(s, b) + c_2 + 1}{c_2} \right) \right) & \text{(used in MuZero), } $$
+   where $c, c_1, c_2$ are constants. For example, $c_1 = 1.25$ and $c_2 = 19652$ in [MuZero](https://arxiv.org/abs/1911.08265) (see page 12). The implementation in this repository uses the first formula with default value $c=1.25$.
 2. **Expansion and evaluation**: After reaching the leaf node $s^l$, invoke the function $f_\theta$ to compute $\mathbf{p}^l, v^l = f_\theta(s^l)$. The child nodes of $s^l$ are added to the tree, each edge being initialized with $N(s^l, a) = 0$, $Q(s^l, a) = 0$, $P(s^l, a) = \mathbf{p}^l_a$.
-3. **Update**: The visit counts are incremented and expected rewards updated. Specifically, using the following assignments: $$\begin{aligned} & N(s^k, a^k) \leftarrow N(s^k, a^k) + 1 & \text{for }k = 0, 1, \dots, l-1, \\ & Q(s^k, a^k) \leftarrow \frac{(N(s^k, a^k) -1)Q(s^k, a^k) \pm v^l}{N(s^k, a^k)} & \text{for }k = 0, 1, \dots, l-1. \end{aligned}$$ The sign of $v^l$ in the second update depends is $+1$ if the player at node $s^k$ is the same as the player at node $s^l$, $-1$ otherwise. This formula assumes that the game is a two-player zero-sum game, but it can be generalized by storing the rewards for all players.
+3. **Update**: The visit counts are incremented and expected rewards updated. Specifically, using the following assignments:
+   $$ N(s^k, a^k) \leftarrow N(s^k, a^k) + 1 & \text{for }k = 0, 1, \dots, l-1, $$
+   $$ Q(s^k, a^k) \leftarrow \frac{(N(s^k, a^k) -1)Q(s^k, a^k) \pm v^l}{N(s^k, a^k)} & \text{for }k = 0, 1, \dots, l-1. $$
+   The sign of $v^l$ in the second update depends is $+1$ if the player at node $s^k$ is the same as the player at node $s^l$, $-1$ otherwise. This formula assumes that the game is a two-player zero-sum game, but it can be generalized by storing the rewards for all players.
 
 Finally, AlphaZero chooses action $a$ at the root $s^0$ according to probability
 
-$$
-\pi_a \propto N(s^0, a)^{1/t} ,
-$$
+$$ \pi_a \propto N(s^0, a)^{1/t} , $$
 
 where $t \geq 0$ is a fixed temperature hyperparameter.
 
@@ -51,9 +55,7 @@ One technical point not yet mentioned is the Dirichlet noise injected by AlphaZe
 
 An important aspect of AlphaZero is training the deep learning model, which is done via self play. Starting at an initial game state $s^0$, edges $(s^0, a^0), (s^1, a^1), \dots, (s^{T-1}, a^{T-1})$ are chosen until a terminal state $s^T$ is reached. At each step $t$ we store the posterior policy $\pi^t$ from the tree search, and we record the outcome $z^t \in\lbrace -1, 0, +1 \rbrace$ of the game. Note that $z^t$ depends on $s^t$ because the outcome is from the perspective of the current player at state $s^t$. For each intermediate $s^t$, $t = 0, \dots, T-1$, we get a training example for the deep learning model by evaluating the output $f_\theta(s^t) = (\mathbf{p}^t, v^t)$ using loss
 
-$$
-L = (z^t - v^t)^2 - (\pi^t)^T \log \mathbf{p}^t + \lambda \Vert \theta \Vert^2
-$$
+$$ L = (z^t - v^t)^2 - (\pi^t)^T \log \mathbf{p}^t + \lambda \Vert \theta \Vert^2 $$
 
 for some regularization parameter $\lambda$. Instead of the cross-entropy term $(\pi^t)^T \log \mathbf{p}^t$, we can equivalently use Kullback-Leibler divergence $D(\pi^t \Vert \mathbf{p}^t)$, since it yields the same gradients, but the KL-divergence is arguably more descriptive.
 
