@@ -2,6 +2,8 @@ This document contains an overview of the main algorithms implemented in the [co
 
 # Abstract MCTS
 
+Implementation references: [Abstract MCTS](../core/tree_search.py), [Vanilla MCTS](../core/algorithms/MCTS.py).
+
 Monte Carlo Tree Search (MCTS) often refers to a family of algorithms, including AlphaZero, but strictly speaking it is also a [specific algorithm](https://en.wikipedia.org/wiki/Monte_Carlo_tree_search). To avoid ambiguity, I will distinguish the specific algorithm from a _template algorithm_ that I will refer to as _abstract MCTS_, serving as a common ground for both vanilla MCTS and AlphaZero.
 
 The setting in abstract MCTS is that of a game tree. The root node $s^0$ represents the current state of the game. The edges $(s, a)$ out of a state $s$ correspond to actions available to the player whose turn it is at state $s$. Each edge $(s, a)$ in the tree stores certain values; in both MCTS and AlphaZero these are the visit count $N(s,a)$ and Q-value $Q(s,a)$ representing an estimated expected reward. The objective is to choose the best action $a$ at the root node $s^0$, by searching the game tree.
@@ -14,8 +16,6 @@ Abstract MCTS proceeds in 4 phases, roughly speaking:
 4. **Update/Backpropagation**. Update values of the ancestor edges $(s^0, a^0), \dots , (s^{l-1}, a^{l-1})$ based on the evaluation.
 
 In vanilla MCTS, selection is done using the [Upper Confidence bound for Trees (UCT) formula](https://en.wikipedia.org/wiki/Monte_Carlo_tree_search#Exploration_and_exploitation), and evaluation is done by _random rollouts_, meaning simulated play to terminal states by choosing actions uniformly at random.
-
-Implementation references: [Abstract MCTS](../core/tree_search.py), [Vanilla MCTS](../core/algorithms/MCTS.py).
 
 # AlphaZero
 
