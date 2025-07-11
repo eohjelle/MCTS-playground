@@ -59,7 +59,7 @@ $$ N(s^k, a^k) \leftarrow N(s^k, a^k) + 1 \quad \text{for }k = 0, 1, \dots, l-1,
 
 $$ Q(s^k, a^k) \leftarrow \frac{(N(s^k, a^k) -1)Q(s^k, a^k) \pm v^l}{N(s^k, a^k)} \quad \text{for }k = 0, 1, \dots, l-1. $$
 
-The sign of $v^l$ in the second update depends is $+1$ if the player at node $s^k$ is the same as the player at node $s^l$, $-1$ otherwise. This formula assumes that the game is a two-player zero-sum game, but it can be generalized by storing the rewards for all players.
+The sign of $v^l$ in the second update depends is $+1$ if the player at node $s^k$ is the same as the player at node $s^l$, $-1$ otherwise. This formula assumes that the game is a two-player zero-sum game, but it can be generalized by storing the rewards for all players (as in the code reference).
 
 ---
 
@@ -69,7 +69,7 @@ $$ \pi_a \propto N(s^0, a)^{1/t} , $$
 
 where $t \geq 0$ is a fixed temperature hyperparameter.
 
-One technical point not yet mentioned is the Dirichlet noise injected by AlphaZero at the root node. Whereas the prior policy $P(s, a)$ is dictated by the the model policy $\mathbf{p}_a$ at _non-root nodes_ $s$, at the root node it is given by $P(s, a) = (1 - \epsilon) \mathbf{p}_a + \epsilon \mathbf{q}_a$, where $\mathbf{q}_a \sim \text{Dir}(\underbrace{\alpha, \alpha, \dots, \alpha}_{\# \text{actions at }s})$ is sampled from a Dirichlet distribution. The hyperparameters $\alpha > 0$ and $\epsilon \in [0, 1]$ are fixed; the case $\epsilon = 0$ corresponds to no Dirichlet noise.
+One technical point not yet mentioned is the Dirichlet noise injected by AlphaZero at the root node. Whereas the prior policy $P(s, a)$ is dictated by the the model policy $\mathbf{p}_a$ at _non-root nodes_ $s$, at the root node it is given by $P(s, a) = (1 - \epsilon) \mathbf{p}_a + \epsilon \mathbf{q}_a$, where $\mathbf{q} \sim \text{Dir}(\alpha, \alpha, \dots, \alpha)$ is sampled from a Dirichlet distribution. The hyperparameters $\alpha > 0$ and $\epsilon \in [0, 1]$ are fixed; the case $\epsilon = 0$ corresponds to no Dirichlet noise.
 
 ## Training the deep learning model
 

@@ -4,6 +4,10 @@ This folder contains tools for implementing and evaluating tree search algorithm
 
 ## Overview
 
+### Games
+
+All game playing agents interact with games via the `State` protocol, found in `state.py`, which can encode most turn-based games. Implementations of several games can be found in `games`, including a wrapper for OpenSpiel games.
+
 ### Algorithms
 
 The main tree search algorithm protocol `TreeSearch` is defined in `tree_search.py`, with [abstract MCTS](../docs/algorithms_overview.md) being implemented in `__call__`. This protocol contains the following abstract methods:
@@ -17,8 +21,6 @@ Implementations of [vanilla MCTS](./algorithms/MCTS.py) and [AlphaZero](./algori
 
 A more general `TreeAgent` protocol can be found in `agent.py`, which is any game playing agent that maintains an internal (partial) game tree. It is convenient to represent all game playing agents in this way in order to treat them uniformly in other scripts, such as those found under `simulation.py`.
 
-All game playing agents interact with games via the `State` protocol, found in `state.py`, which can encode most turn-based games. Implementations of several games can be found in `games`, including a wrapper for OpenSpiel games.
-
 ### Deep RL
 
 Where the code gets more intricate is when deep learning models are integrated into the algorithms. General abstractions for PyTorch models are defined in `model_interface.py`, where the main added value consists of methods to save and load models from file. More importantly:
@@ -31,6 +33,8 @@ It is important to note that in any specific experiment, all of these (the state
 The `Trainer` class defined in `training.py` trains the model used in a `TreeSearch` algorithm. It uses multiprocessing to generate training data via self play or play against other `TreeAgent`s, and to evaluate performance against `TreeAgent`s.[^1] But it can also be used for supervised training, by supplying a replay buffer and setting `num_actors=0`. The `Trainer` class does extensive logging, both to files and to Weights & Biases.
 
 [^1]: No decentralized setup is currently supported, so all processes are assumed to run on the same machine.
+
+### Misc
 
 Beyond what has already been mentioned, there is also:
 
