@@ -1,4 +1,4 @@
-This document contains an overview of the main algorithms implemented in the repository.
+This document contains an overview of the main algorithms implemented in the [core repository](../core/README.md).
 
 # Abstract MCTS
 
@@ -39,7 +39,7 @@ Selection of the next edge is done according to a PUCT rule
 
 $$ a^k = \text{argmax}\_a Q(s^k, a) + U(s^k, a) , $$
 
-where $U(s, a)$ is a function that boosts under-explored edges proportionally to the prior probability $P(s, a)$. Specifically, some candidates for $U(s, a)$ are
+where $Q(s^k, a)$ is the exploitation term using the stored value, and $U(s, a)$ is the exploration term selecting edges proportionally to the prior probability $P(s, a)$. Specifically, some candidates for $U(s, a)$ are
 
 $$ U(s, a) = P(s, a) \frac{\sqrt{\sum_b N(s, b)}}{1 + N(s, a)} c \quad \text{(used in AlphaGo Zero), }$$
 
@@ -59,7 +59,7 @@ $$ N(s^k, a^k) \leftarrow N(s^k, a^k) + 1 \quad \text{for }k = 0, 1, \dots, l-1,
 
 $$ Q(s^k, a^k) \leftarrow \frac{(N(s^k, a^k) -1)Q(s^k, a^k) \pm v^l}{N(s^k, a^k)} \quad \text{for }k = 0, 1, \dots, l-1. $$
 
-The sign of $v^l$ in the second update depends is $+1$ if the player at node $s^k$ is the same as the player at node $s^l$, $-1$ otherwise. This formula assumes that the game is a two-player zero-sum game, but it can be generalized by storing the rewards for all players (as in the code reference).
+The sign of $v^l$ in the second update is $+1$ if the player at node $s^k$ is the same as the player at node $s^l$, $-1$ otherwise. This formula assumes that the game is a two-player zero-sum game, but it can be generalized by storing the rewards for all players (as in the code reference).
 
 ---
 
@@ -69,7 +69,7 @@ $$ \pi_a \propto N(s^0, a)^{1/t} , $$
 
 where $t \geq 0$ is a fixed temperature hyperparameter.
 
-One technical point not yet mentioned is the Dirichlet noise injected by AlphaZero at the root node. Whereas the prior policy $P(s, a)$ is dictated by the the model policy $\mathbf{p}_a$ at _non-root nodes_ $s$, at the root node it is given by $P(s, a) = (1 - \epsilon) \mathbf{p}_a + \epsilon \mathbf{q}_a$, where $\mathbf{q} \sim \text{Dir}(\alpha, \alpha, \dots, \alpha)$ is sampled from a Dirichlet distribution. The hyperparameters $\alpha > 0$ and $\epsilon \in [0, 1]$ are fixed; the case $\epsilon = 0$ corresponds to no Dirichlet noise.
+One technical point not yet mentioned is the Dirichlet noise injected by AlphaZero at the root node. Whereas the prior policy $P(s, a)$ is dictated by the model policy $\mathbf{p}_a$ at _non-root nodes_ $s$, at the root node it is given by $P(s, a) = (1 - \epsilon) \mathbf{p}_a + \epsilon \mathbf{q}_a$, where $\mathbf{q} \sim \text{Dir}(\alpha, \alpha, \dots, \alpha)$ is sampled from a Dirichlet distribution. The hyperparameters $\alpha > 0$ and $\epsilon \in [0, 1]$ are fixed; the case $\epsilon = 0$ corresponds to no Dirichlet noise.
 
 ## Training the deep learning model
 

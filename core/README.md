@@ -39,7 +39,7 @@ The `Trainer` class defined in `training.py` trains the model used in a `TreeSea
 Beyond what has already been mentioned, there is also:
 
 - `simulation.py`: Functions for simulating games between different `TreeAgent`s and collecting data. This is used both for generating training examples and for evaluation.
-- `data_structures.py`: Several classes used for training.
+- `data_structures.py`: Several classes used for training, such as `ReplayBuffer`.
 - `evaluation.py`: Classes used to evaluate performance against other `TreeAgent`s. This is used for evaluation in `Trainer`.
 - `generate_self_play_data.py`: Simple functions to generate training examples via self play. For example, one can generate training examples using a strong MCTS agent, and train a model on this data before doing self play.
 - `types.py`: A few generic type variables.
