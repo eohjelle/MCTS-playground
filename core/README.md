@@ -6,7 +6,7 @@ This folder contains tools for implementing and evaluating tree search algorithm
 
 ### Games
 
-All game playing agents interact with games via the `State` protocol, found in `state.py`, which can encode most turn-based games. Implementations of several games can be found in `games`, including a wrapper for OpenSpiel games.
+All game playing agents interact with games via the `State` protocol, found in `state.py`, which can encode most turn-based games. Implementations of several games can be found in `games`, including a wrapper for [OpenSpiel](https://github.com/google-deepmind/open_spiel) games.
 
 ### Algorithms
 
