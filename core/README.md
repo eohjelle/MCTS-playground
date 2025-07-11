@@ -10,14 +10,14 @@ All game playing agents interact with games via the `State` protocol, found in [
 
 ### Algorithms
 
-The main tree search algorithm protocol `TreeSearch` is defined in [`tree_search.py`](./tree_search.py), with [abstract MCTS](../docs/algorithms_overview.md) being implemented in `__call__`. This protocol contains the following abstract methods:
+The main tree search algorithm protocol `TreeSearch` is defined in [`tree_search.py`](./tree_search.py), with [abstract MCTS](../docs/algorithms_overview.md#abstract-mcts) being implemented in `__call__`. This protocol contains the following abstract methods:
 
 - `select`: Select an action at the given node during tree traversal.
 - `evaluate`: Evaluate a leaf node's state.
 - `update`: Update a node's value during backpropagation.
 - `policy`: Select the best action at a node according to the search results.
 
-Implementations of [vanilla MCTS](./algorithms/MCTS.py) and [AlphaZero](./algorithms/AlphaZero.py) adhering to this protocol can be found under [`algorithms`](./algorithms/).
+Implementations of [vanilla MCTS](./algorithms/MCTS.py) and [AlphaZero](./algorithms/AlphaZero.py) adhering to this protocol can be found under [`algorithms`](./algorithms/). For detailed explanations of these algorithms, see the [algorithms overview](../docs/algorithms_overview.md).
 
 A more general `TreeAgent` protocol can be found in [`agent.py`](./agent.py), which is any game playing agent that maintains an internal (partial) game tree. It is convenient to represent all game playing agents in this way in order to treat them uniformly in other scripts, such as those found under [`simulation.py`](./simulation.py).
 

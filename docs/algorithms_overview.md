@@ -24,7 +24,7 @@ In vanilla MCTS, selection is done using the [Upper Confidence bound for Trees (
 
 Implementation reference: [`AlphaZero.py`](../core/algorithms/AlphaZero.py).
 
-AlphaZero follows the abstract MCTS template, and differs from vanilla MCTS in two places. The first is by using a deep learning model to evaluate leaf nodes. The second is by also using the deep learning model to inform exploration in the selection process.
+AlphaZero follows the abstract MCTS template, and differs from vanilla MCTS in two places. The first is using a deep learning model to evaluate leaf nodes. The second is by also using the deep learning model to inform exploration in the selection process.
 
 AlphaZero stores the following values in an edge $(s,a)$:
 
