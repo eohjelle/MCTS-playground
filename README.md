@@ -4,7 +4,7 @@
   - [x] Change get_reward to rewards to be more compatible with openSpiel's state? In fact, rearrange it so that OpenSpiel's state satisfies the protocol?
   - [x] Implement wrapper for OpenSpiel states
   - [ ] Implement wrapper for OpenSpiel algorithms (to be used in conjunction with OpenSpiel game states)
-- [ ] Use absl.flags in training scripts
+- [x] Use absl.flags in training scripts
 - [x] "Actor" based training for separate playing and training threads
 - [ ] Finish and test Dirichlet implementation
 - [ ] Documentation
@@ -19,24 +19,35 @@
 
 # MCTS Playground
 
-This repository contains an implementation of AlphaZero from sctratch. The implementation uses clear abstractions for tree search algorithms based on Monte Carlo Tree Search (MCTS) as well as for training deep learning models via self play.
+This repository contains an educational and research-friendly Python implementation of AlphaZero and variants with modular tree search as well as deep RL tooling.
 
-The goal of this project is to be useful for educational purposes and research. In particular, the code is designed for convenient prototyping of tree search algorithms based on AlphaZero. One such prototype can be found in the folder [`examples/Dirichlet`](examples/Dirichlet/).
+## Overview
 
-All code in this project is written in Python, and is not designed for performance. There are numerous projects that provide efficient implementations of tree search algorithms, for example ........
+`core` is the heart of the repository, containing all the algorithms, games, and core training tools. More information can be found in the [core README](./core/README.md).
 
-## Core Framework
+`docs` contains [a concise overview](./docs/algorithms_overview.md) of the main algorithms, including MCTS and AlphaZero.
 
-The main value of this project lies in its clean, extensible abstractions found in the [`core/`](core/) folder. These make it easy to:
+`experiments` contains several experiments using the core functionality, including full AlphaZero training pipelines. For example, see [Connect 4](./experiments/connect_four/README.md).
 
-- Implement new games by defining a simple `State` protocol
-- Experiment with different tree search algorithms by extending `TreeSearch`
-- Train models using the flexible `ModelInterface`
+## Getting started
 
-See the [core README](core/README.md) for detailed documentation of these abstractions.
+To install the required packages in a conda environment named `mcts-playground`, run the script at `install.sh`.
 
-# Examples
+### Example: Connect 4
 
-## Tic tac toe
+To play Connect 4 against AlphaZero using a pretrained model:
 
-To play run the following command in the root folder:
+```bash
+python -m experiments.connect_four.play
+```
+
+To train a new model from scratch via self play and wandb logging:[^1]
+
+[^1]: Requires a wandb account, run without the `--wandb` flag to disable.
+
+```bash
+python -m experiments.connect_four.train --name="My training run" --wandb --num_actors=10
+```
+
+The `num_actors` flag is the number of data generating actors to run in parallel; this should not exceed the number of CPU cores. Note that evaluation also runs in its own process.
+For additional flags go to [the source](./experiments/connect_four/train.py).

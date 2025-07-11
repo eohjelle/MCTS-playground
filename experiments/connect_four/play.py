@@ -6,8 +6,8 @@ from core import Model, ModelPredictor
 from core.algorithms.AlphaZero import AlphaZero, AlphaZeroModelAgent, AlphaZeroConfig
 from core.algorithms import MCTS, MCTSConfig, RandomAgent
 from core.games.open_spiel_state_wrapper import OpenSpielState
-from experiments.connect_four.models.resmlp import ResMLP, ResMLPInitParams
-from experiments.connect_four.tensor_mapping import ConnectFourTensorMapping
+from experiments.connect_four.models.resnet import ResNet, ResNetInitParams
+from experiments.connect_four.tensor_mapping import ConnectFourTensorMapping, LayeredConnectFourTensorMapping
 
 # Type alias for agents we support
 ConnectFourAgent = Union[
@@ -52,7 +52,7 @@ def get_human_action(state: OpenSpielState) -> int:
 def create_initial_state() -> OpenSpielState:
     """Create a new Connect Four game state."""
     game = pyspiel.load_game("connect_four")
-    return OpenSpielState(game.new_initial_state(), num_players=2)
+    return OpenSpielState(game.new_initial_state(), hash_board=True)
 
 def create_agent(
     initial_state: OpenSpielState, 
@@ -98,13 +98,13 @@ def create_agent(
             #     device = torch.device('cpu')
             # )
             model = Model.from_file(
-                model_architecture = ResMLP,
-                path = 'checkpoints/connect_four/ResMLP:5-32-128:fixed_terminal_visit_counts/model.pt',
+                model_architecture = ResNet,
+                path = 'experiments/connect_four/resnet_model.pt',
                 device = torch.device('cpu')
             )
             model_predictor = ModelPredictor(
                 model = model, 
-                tensor_mapping = ConnectFourTensorMapping()
+                tensor_mapping = LayeredConnectFourTensorMapping()
             )
             return AlphaZero(initial_state, model_predictor, AlphaZeroConfig(num_simulations=800, temperature=0.0)) \
                 if agent_type == 'alphazero' \

@@ -2,7 +2,7 @@
 conda create -n mcts-playground python -y
 
 # Install python & required packages
-conda run -n mcts-playground pip install torch wandb pytest
+conda run -n mcts-playground pip install torch einops wandb pytest
 
 # Install open_spiel directly from source, pip installation does not always work
 git clone https://github.com/google-deepmind/open_spiel.git

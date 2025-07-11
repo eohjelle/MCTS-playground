@@ -3,8 +3,9 @@ from core import Model, ModelPredictor
 from core.algorithms.AlphaZero import AlphaZero, AlphaZeroModelAgent, AlphaZeroConfig
 from core.algorithms import Minimax, MCTS, MCTSConfig, RandomAgent
 from core.games.dots_and_boxes import DotsAndBoxesState, DotsAndBoxesPlayer
-from NNmodels.MLP import MLP, MLPInitParams
-from encoder import DABTensorMapping
+from .NNmodels.MLP import MLP, MLPInitParams
+from .NNmodels.resnet import ResNet, ResNetInitParams
+from .encoder import DABTensorMapping, LayeredDABTensorMapping
 #from applications.dots_and_boxes.NNmodels.transformer import DotsAndBoxesTransformerInterface
 import torch
 import os
@@ -42,83 +43,80 @@ def get_human_action(state: DotsAndBoxesState) -> Tuple[int, int]:
         except ValueError as e:
             print(f"ValueError: {e}")
 
-def create_agent(initial_state: DotsAndBoxesState, agent_type: str, project: str = "AlphaZero-DotsAndBoxes") -> Optional[DotsAndBoxesAgent]:
+def create_agent(
+    initial_state: DotsAndBoxesState, 
+    agent_type: str, 
+    project: str = "AlphaZero-DotsAndBoxes"
+) -> Optional[DotsAndBoxesAgent]:
     """Create an agent of the specified type.
     
     Args:
         initial_state: The initial game state
         agent_type: One of 'human', 'mcts', 'alphazero', 'model', or 'random'
+        project: Wandb project name for loading models
     
     Returns:
         The created agent, or None if agent_type is 'human'
     """
-    if agent_type == 'human':
-        return None
-    elif agent_type == 'mcts':
-        return MCTS(initial_state, config=MCTSConfig(num_simulations=100))
-    elif agent_type == 'random':
-        return RandomAgent(initial_state)
-    elif agent_type == 'minimax':
-        return Minimax(initial_state)
-    else:  # alphazero or model
-        # Get model type
-        while True:
-            model_type = input("Choose model type (mlp/transformer): ").lower()
-            if model_type in ['mlp', 'transformer']:
-                break
-            print("Please enter mlp or transformer")
-            
-        # Setup device and model
-        device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
-        match model_type:
-            case 'mlp':
-                model_name = 'dots_and_boxes_mlp'
-                model_architecture = MLP
-                tensor_mapping = DABTensorMapping()
-                default_model_params: MLPInitParams = {
-                    'num_rows': initial_state.rows,
-                    'num_cols': initial_state.cols,
-                    'hidden_sizes': [32, 128, 32]
-                }
-            case 'transformer':
-                raise NotImplementedError("Transformer model not implemented yet")
-            case _:
-                raise ValueError(f"Invalid model type: {model_type}")
-            
-        # Load checkpoint if it exists
-        try:
-            model = Model.from_wandb(
-                model_architecture=model_architecture,
-                project=project,
-                model_name=model_name,
-            )
-        except Exception as e:
-            print(e)
-            print(f"Error loading {model_type} model from wandb. Creating new model.")
-            model = Model(
-                model_architecture=model_architecture,
-                init_params=default_model_params,
-                device=device
-            )
-        
-        # Create model predictor
-        model_predictor = ModelPredictor(model, tensor_mapping)
-            
-        # Create appropriate agent type
-        if agent_type == 'alphazero':
-            return AlphaZero(
-                initial_state=initial_state,
-                model_predictor=model_predictor,
-                params=AlphaZeroConfig(
-                    num_simulations=100,
-                    exploration_constant=1.0,
-                    dirichlet_alpha=0.0,
-                    dirichlet_epsilon=0.0,
-                    temperature=0.0
-                )
-            )
-        else:  # model
-            return AlphaZeroModelAgent(initial_state, model_predictor, tensor_mapping)
+    match agent_type:
+        case 'human':
+            return None
+        case 'mcts':
+            while True:
+                try:
+                    num_sims = int(input("Enter number of MCTS simulations (default 100): ") or "100")
+                    if num_sims > 0:
+                        break
+                    print("Number of simulations must be positive")
+                except ValueError:
+                    print("Please enter a valid number")
+            return MCTS(initial_state, config=MCTSConfig(num_simulations=num_sims))
+        case 'random':
+            return RandomAgent(initial_state)
+        case 'alphazero' | 'model':  # alphazero or model
+            # Setup device and model
+            # model = Model(
+            #     model_architecture = ResMLP, 
+            #     init_params = ResMLPInitParams(
+            #         input_dim=2 * 6 * 7,
+            #         num_residual_blocks=5,
+            #         residual_dim=32,
+            #         hidden_size=128,
+            #         policy_head_dim=7
+            #     ), 
+            #     device = torch.device('cpu')
+            # )
+            match initial_state.rows, initial_state.cols:
+                case 5, 5:
+                    model = Model.from_wandb(
+                        model_architecture = ResNet,
+                        project = "AlphaZero-DotsAndBoxes",
+                        model_name = "cloud_ResNet_10x32_model",
+                        device = torch.device('cpu')
+                    )
+                    model_predictor = ModelPredictor(
+                        model = model, 
+                        tensor_mapping = LayeredDABTensorMapping()
+                    )
+                case _, _:
+                    model = Model(
+                        model_architecture = MLP,
+                        init_params = MLPInitParams(
+                            num_rows=initial_state.rows,
+                            num_cols=initial_state.cols,
+                            hidden_sizes=[128, 128]
+                        ),
+                        device = torch.device('cpu')
+                    )
+                    model_predictor = ModelPredictor(
+                        model = model, 
+                        tensor_mapping = DABTensorMapping()
+                    )
+            return AlphaZero(initial_state, model_predictor, AlphaZeroConfig(num_simulations=800, temperature=0.0)) \
+                if agent_type == 'alphazero' \
+                else AlphaZeroModelAgent(initial_state, model_predictor, temperature=0.0)
+        case _:
+            raise ValueError(f"Invalid agent type: {agent_type}")
 
 
 def play_game(
@@ -162,7 +160,7 @@ def play_game(
         print_board(state)
     
     # Game over
-    rewards = state.rewards
+    rewards = state.rewards()
     reward_a = rewards['A']
     reward_b = rewards['B']
     

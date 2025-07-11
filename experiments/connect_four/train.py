@@ -3,6 +3,7 @@ from absl import app, flags
 from core.agent import TreeAgent
 from .models.resmlp import ResMLP, ResMLPInitParams
 from .models.resnet import ResNet, ResNetInitParams
+from .models.resnet2 import ResNet2, ResNet2InitParams
 from core.games.open_spiel_state_wrapper import OpenSpielState
 from .tensor_mapping import ConnectFourTensorMapping, LayeredConnectFourTensorMapping
 import torch
@@ -15,6 +16,7 @@ flags.DEFINE_string("name", None, "Name of the run")
 flags.DEFINE_boolean("resume", False, "Whether to resume from last checkpoint")
 flags.DEFINE_string("run_id", None, "Wandb run ID to resume from")
 flags.DEFINE_string("model_path", None, "Path to an existing model to load")
+flags.DEFINE_string("buffer_path", None, "Path to a replay buffer to load")
 flags.DEFINE_string("log_level", "INFO", "Logging level")
 flags.DEFINE_integer("num_actors", 10, "Number of actors")
 flags.DEFINE_string("file_log_level", "DEBUG", "Logging level for file logging")
@@ -23,7 +25,7 @@ flags.DEFINE_boolean("supervised", False, "Whether to use supervised training")
 
 def state_factory():
     game = pyspiel.load_game("connect_four")
-    return OpenSpielState(game.new_initial_state(), num_players=2)
+    return OpenSpielState(game.new_initial_state(), hash_board=True)
 
 def random_agent_factory(state: State) -> TreeAgent:
     return RandomAgent(state)
@@ -52,10 +54,17 @@ def main(argv):
             model_params = ResNetInitParams(in_channels=2, num_residual_blocks=5, channels=64, rows=6, cols=7, policy_head_dim=7)
             tensor_mapping = LayeredConnectFourTensorMapping()
             tm_type='layered'
+        case 'resnet2':
+            model_architecture = ResNet
+            model_params = ResNetInitParams(in_channels=2, num_residual_blocks=8, channels=64, rows=6, cols=7, policy_head_dim=7)
+            tensor_mapping = LayeredConnectFourTensorMapping()
+            tm_type='layered'
         case _:
             raise ValueError(f"Invalid model type: {FLAGS.model}")
         
-    if FLAGS.supervised:
+    if FLAGS.buffer_path is not None:
+        buffer_path = FLAGS.buffer_path
+    elif FLAGS.supervised:
         buffer_path = f'experiments/connect_four/data/mcts1200_{tm_type}_training_data.pt'
     else:
         buffer_path = None
@@ -67,11 +76,13 @@ def main(argv):
         algorithm_params=AlphaZeroConfig(), # Use default AlphaZero hyperparameters
         checkpoint_dir=f"checkpoints/connect_four/{FLAGS.name or 'default'}",
         tensor_mapping=tensor_mapping,
-        training_adapter=AlphaZeroTrainingAdapter(), 
+        training_adapter=AlphaZeroTrainingAdapter(
+            value_softness=1.0
+        ), 
         create_initial_state=state_factory,
         optimizer=torch.optim.Adam,
         optimizer_params={
-            'lr': 3e-4,
+            'lr': 3e-5,
             'betas': (0.9, 0.999),
             'eps': 1e-8,
             'weight_decay': 1e-4,
@@ -80,8 +91,8 @@ def main(argv):
         lr_scheduler=torch.optim.lr_scheduler.ReduceLROnPlateau,
         lr_scheduler_params={
             'factor': 0.9,
-            'patience': 1_000,
-            'cooldown': 1_000,
+            'patience': 200,
+            'cooldown': 200,
             'min_lr': 1e-5
         },
         evaluator=StandardWinLossTieEvaluator(
@@ -104,12 +115,13 @@ def main(argv):
         wandb_run_id=FLAGS.run_id,
         resume_from_last_checkpoint=FLAGS.resume,
         learning_batch_size=256,
-        wandb_save_artifacts=False,
+        wandb_save_artifacts=True,
+        checkpoint_frequency_hours=5.0,
         load_model_from_path=FLAGS.model_path,
         load_replay_buffer_from_path=buffer_path,
         num_actors=FLAGS.num_actors if not FLAGS.supervised else 0,
         learning_min_buffer_size = 30 * 256,
-        buffer_max_size = 100 * 256,
+        buffer_max_size = 150 * 256,
         learning_min_new_examples_per_step = 1 * 256 if not FLAGS.supervised else 0,
     )
 

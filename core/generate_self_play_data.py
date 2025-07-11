@@ -1,6 +1,5 @@
-# Generate self-play data for training, for example using a strong MCTS agent.
+# Generate self-play data for training, for example using a strong MCTS agent or a Minimax agent.
 
-from core.algorithms import MCTS, MCTSConfig
 from .agent import TreeAgent
 from .data_structures import ReplayBuffer
 from .simulation import generate_trajectories
