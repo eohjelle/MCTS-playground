@@ -8,7 +8,10 @@ This repository contains an educational and research-friendly Python implementat
 
 `docs` contains [a concise overview](./docs/algorithms_overview.md) of the main algorithms, including MCTS and AlphaZero.
 
-`experiments` contains several experiments using the core functionality, including full AlphaZero training pipelines. For example, see [Connect 4](./experiments/connect_four/README.md).
+`experiments` contains several experiments using the core functionality, including full AlphaZero training pipelines. For example:
+
+- [Connect 4](./experiments/connect_four/).
+- [Tic-Tac-Toe](./experiments/experimenting_with_model_architectures_in_tic_tac_toe/).
 
 ## Getting started
 

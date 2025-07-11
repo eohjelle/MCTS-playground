@@ -1,4 +1,4 @@
-This document contains an overview of the main algorithms implemented in the [core repository](../core/README.md).
+This document contains an overview of the main algorithms implemented in the [core repository](../core/).
 
 # Abstract MCTS
 
