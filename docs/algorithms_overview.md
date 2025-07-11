@@ -34,15 +34,15 @@ Let $f_\theta$ represent the deep learning model for weights $\theta$. For an in
 AlphaZero implements the abstract MCTS template as follows:
 
 1. **Selection**: Selection of the next edge is done according to a PUCT rule
-   $$ a^k = \operatorname{argmax}\_a Q(s^k, a) + U(s^k, a) , $$
+   $$ a^k = \text{argmax}\_a Q(s^k, a) + U(s^k, a) , $$
    where $U(s, a)$ is a function that boosts under-explored edges proportionally to the prior probability $P(s, a)$. Specifically, some candidates for $U(s, a)$ are
-   $$ U(s, a) = P(s, a) \frac{\sqrt{\sum_b N(s, b)}}{1 + N(s, a)} c \text{(used in AlphaGo Zero), }$$
-   $$ U(s, a) = P(s, a) \frac{\sqrt{\sum_b N(s, b)}}{1 + N(s, a)} \left( c_1 + \log \left( \frac{\sum_b N(s, b) + c_2 + 1}{c_2} \right) \right) & \text{(used in MuZero), } $$
+   $$ U(s, a) = P(s, a) \frac{\sqrt{\sum_b N(s, b)}}{1 + N(s, a)} c \quad \text{(used in AlphaGo Zero), }$$
+   $$ U(s, a) = P(s, a) \frac{\sqrt{\sum_b N(s, b)}}{1 + N(s, a)} \left( c_1 + \log \left( \frac{\sum_b N(s, b) + c_2 + 1}{c_2} \right) \right) \quad \text{(used in MuZero), } $$
    where $c, c_1, c_2$ are constants. For example, $c_1 = 1.25$ and $c_2 = 19652$ in [MuZero](https://arxiv.org/abs/1911.08265) (see page 12). The implementation in this repository uses the first formula with default value $c=1.25$.
 2. **Expansion and evaluation**: After reaching the leaf node $s^l$, invoke the function $f_\theta$ to compute $\mathbf{p}^l, v^l = f_\theta(s^l)$. The child nodes of $s^l$ are added to the tree, each edge being initialized with $N(s^l, a) = 0$, $Q(s^l, a) = 0$, $P(s^l, a) = \mathbf{p}^l_a$.
 3. **Update**: The visit counts are incremented and expected rewards updated. Specifically, using the following assignments:
-   $$ N(s^k, a^k) \leftarrow N(s^k, a^k) + 1 & \text{for }k = 0, 1, \dots, l-1, $$
-   $$ Q(s^k, a^k) \leftarrow \frac{(N(s^k, a^k) -1)Q(s^k, a^k) \pm v^l}{N(s^k, a^k)} & \text{for }k = 0, 1, \dots, l-1. $$
+   $$ N(s^k, a^k) \leftarrow N(s^k, a^k) + 1 \quad \text{for }k = 0, 1, \dots, l-1, $$
+   $$ Q(s^k, a^k) \leftarrow \frac{(N(s^k, a^k) -1)Q(s^k, a^k) \pm v^l}{N(s^k, a^k)} \quad \text{for }k = 0, 1, \dots, l-1. $$
    The sign of $v^l$ in the second update depends is $+1$ if the player at node $s^k$ is the same as the player at node $s^l$, $-1$ otherwise. This formula assumes that the game is a two-player zero-sum game, but it can be generalized by storing the rewards for all players.
 
 Finally, AlphaZero chooses action $a$ at the root $s^0$ according to probability
@@ -51,7 +51,7 @@ $$ \pi_a \propto N(s^0, a)^{1/t} , $$
 
 where $t \geq 0$ is a fixed temperature hyperparameter.
 
-One technical point not yet mentioned is the Dirichlet noise injected by AlphaZero at the root node. Whereas the prior policy $P(s, a)$ is dictated by the the model policy $\mathbf{p}_a$ at _non-root nodes_ $s$, at the root node it is given by $P(s, a) = (1 - \epsilon) \mathbf{p}_a + \epsilon \mathbf{q}_a$, where $\mathbf{q}_a \sim \mbox{Dir}(\underbrace{\alpha, \alpha, \dots, \alpha}_{\# \text{actions at }s})$ is sampled from a Dirichlet distribution. The hyperparameters $\alpha > 0$ and $\epsilon \in [0, 1]$ are fixed; the case $\epsilon = 0$ corresponds to no Dirichlet noise.
+One technical point not yet mentioned is the Dirichlet noise injected by AlphaZero at the root node. Whereas the prior policy $P(s, a)$ is dictated by the the model policy $\mathbf{p}_a$ at _non-root nodes_ $s$, at the root node it is given by $P(s, a) = (1 - \epsilon) \mathbf{p}_a + \epsilon \mathbf{q}_a$, where $\mathbf{q}_a \sim \text{Dir}(\underbrace{\alpha, \alpha, \dots, \alpha}_{\# \text{actions at }s})$ is sampled from a Dirichlet distribution. The hyperparameters $\alpha > 0$ and $\epsilon \in [0, 1]$ are fixed; the case $\epsilon = 0$ corresponds to no Dirichlet noise.
 
 ## Training the deep learning model
 
