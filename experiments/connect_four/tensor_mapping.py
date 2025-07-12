@@ -2,10 +2,10 @@ import torch
 import numpy as np
 from typing import List, Dict, Tuple, Any, cast
 
-from core import TensorMapping
-from core.algorithms.AlphaZero import AlphaZeroEvaluation
-from core.data_structures import TrainingExample
-from core.games.open_spiel_state_wrapper import OpenSpielState
+from mcts_playground import TensorMapping
+from mcts_playground.algorithms.AlphaZero import AlphaZeroEvaluation
+from mcts_playground.data_structures import TrainingExample
+from mcts_playground.games.open_spiel_state_wrapper import OpenSpielState
 import torch.nn.functional as F
 
 class ConnectFourTensorMapping(TensorMapping[int, AlphaZeroEvaluation[int, int]]):
@@ -111,7 +111,7 @@ class ConnectFourTensorMapping(TensorMapping[int, AlphaZeroEvaluation[int, int]]
 
 
 class LayeredConnectFourTensorMapping(ConnectFourTensorMapping):
-    """Tensor mapping compatible with Connect 4 (via OpenSpielState) and AlphaZero, but with a layered encoding."""
+    """Tensor mapping compatible with Connect 4 (via OpenSpielState) and AlphaZero, but with a layered encoding useful for ResNets."""
 
     @staticmethod
     def encode_states(states: List[OpenSpielState], device: torch.device) -> torch.Tensor:

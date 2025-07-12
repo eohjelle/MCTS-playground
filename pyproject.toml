@@ -1,0 +1,26 @@
+# pyproject.toml  (place at repo root)
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcts-playground"
+version = "0.1.0"
+description = "Modular AlphaZero / MCTS research playground"
+authors = [{ name = "Eivind Otto Hjelle", email = "eohjelle@gmail.com" }]
+readme = "README.md"
+requires-python = ">=3.9"
+
+# Pure-Python or pip-friendly deps
+dependencies = [
+    "torch",
+    "einops",
+    "wandb",
+    "absl-py",
+]
+
+[project.optional-dependencies]
+open_spiel = ["open_spiel"] # If not installing from source (as in install.sh)
+
+[tool.setuptools.packages.find]
+where = ["mcts_playground"] 

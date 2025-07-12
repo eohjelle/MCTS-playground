@@ -1,10 +1,8 @@
-from core import AlphaZeroTrainingAdapter, AlphaZeroConfig, TrainerConfig, Trainer, RandomAgent, StandardWinLossTieEvaluator, MCTS, MCTSConfig, State
+from mcts_playground import AlphaZeroTrainingAdapter, AlphaZeroConfig, TrainerConfig, Trainer, RandomAgent, StandardWinLossTieEvaluator, MCTS, MCTSConfig, State, TreeAgent, OpenSpielState
 from absl import app, flags
-from core.agent import TreeAgent
 from .models.resmlp import ResMLP, ResMLPInitParams
 from .models.resnet import ResNet, ResNetInitParams
 from .models.resnet2 import ResNet2, ResNet2InitParams
-from core.games.open_spiel_state_wrapper import OpenSpielState
 from .tensor_mapping import ConnectFourTensorMapping, LayeredConnectFourTensorMapping
 import torch
 import pyspiel
@@ -73,7 +71,7 @@ def main(argv):
     config = TrainerConfig(
         model_architecture=model_architecture,
         model_params=model_params,
-        algorithm_params=AlphaZeroConfig(), # Use default AlphaZero hyperparameters
+        algorithm_params=AlphaZeroConfig(dirichlet_epsilon=0.0), # No Dirichlet noise, otherwise default AlphaZero hyperparameters
         checkpoint_dir=f"checkpoints/connect_four/{FLAGS.name or 'default'}",
         tensor_mapping=tensor_mapping,
         training_adapter=AlphaZeroTrainingAdapter(

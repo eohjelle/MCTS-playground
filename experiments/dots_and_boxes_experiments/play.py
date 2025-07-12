@@ -1,8 +1,5 @@
 from typing import Tuple, Union, Optional
-from core import Model, ModelPredictor
-from core.algorithms.AlphaZero import AlphaZero, AlphaZeroModelAgent, AlphaZeroConfig
-from core.algorithms import Minimax, MCTS, MCTSConfig, RandomAgent
-from core.games.dots_and_boxes import DotsAndBoxesState, DotsAndBoxesPlayer
+from mcts_playground import Model, ModelPredictor, AlphaZero, AlphaZeroModelAgent, AlphaZeroConfig, Minimax, MCTS, MCTSConfig, RandomAgent, DotsAndBoxesState, DotsAndBoxesPlayer
 from .NNmodels.MLP import MLP, MLPInitParams
 from .NNmodels.resnet import ResNet, ResNetInitParams
 from .encoder import DABTensorMapping, LayeredDABTensorMapping

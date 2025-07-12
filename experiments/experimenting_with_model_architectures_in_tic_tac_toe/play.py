@@ -1,7 +1,7 @@
 from typing import Tuple, Optional
-from core import TreeAgent, ModelPredictor, Model
-from core.algorithms import AlphaZero, AlphaZeroModelAgent, AlphaZeroConfig, MCTS, MCTSConfig, Minimax, RandomAgent
-from core.games.tic_tac_toe import TicTacToeState
+from mcts_playground import TreeAgent, ModelPredictor, Model
+from mcts_playground.algorithms import AlphaZero, AlphaZeroModelAgent, AlphaZeroConfig, MCTS, MCTSConfig, Minimax, RandomAgent
+from mcts_playground.games.tic_tac_toe import TicTacToeState
 from .models.mlp_model import TicTacToeMLP
 from .models.transformer_model import TicTacToeTransformer
 from .models.experimental_transformer import TicTacToeExperimentalTransformer
@@ -36,7 +36,7 @@ def create_agent(
     initial_state: TicTacToeState,
     agent_type: str,
     project: str = "AlphaZero-TicTacToe"
-) -> Optional[Agent]:
+) -> Optional[TreeAgent]:
     """Create an agent of the specified type.
     
     Args:
@@ -75,6 +75,7 @@ def create_agent(
                 initial_state=initial_state,
                 model=model,
                 tensor_mapping=MLPTensorMapping()
+            )
         case _:
             raise ValueError(f"Invalid agent type: {agent_type}")
         # Setup model

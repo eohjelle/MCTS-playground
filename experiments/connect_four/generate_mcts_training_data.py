@@ -1,12 +1,12 @@
-from core import AlphaZeroTrainingAdapter, AlphaZeroConfig, TrainerConfig, Trainer, RandomAgent, StandardWinLossTieEvaluator, MCTS, MCTSConfig, State
+from mcts_playground import AlphaZeroTrainingAdapter, AlphaZeroConfig, TrainerConfig, Trainer, RandomAgent, StandardWinLossTieEvaluator, MCTS, MCTSConfig, State
 from absl import app, flags
-from core.agent import TreeAgent
+from mcts_playground.agent import TreeAgent
 from .models.resmlp import ResMLP, ResMLPInitParams
-from core.games.open_spiel_state_wrapper import OpenSpielState
+from mcts_playground.games.open_spiel_state_wrapper import OpenSpielState
 from .tensor_mapping import ConnectFourTensorMapping, LayeredConnectFourTensorMapping
 import pyspiel
 import functools
-from core.generate_self_play_data import generate_self_play_data
+from mcts_playground.generate_self_play_data import generate_self_play_data
 
 FLAGS = flags.FLAGS
 flags.DEFINE_integer("num_simulations", 100, "Number of simulations to run for MCTS")
@@ -16,7 +16,7 @@ flags.DEFINE_string("tensors", None, "Tensor mapping to use")
 
 def state_factory():
     game = pyspiel.load_game("connect_four")
-    return OpenSpielState(game.new_initial_state(), num_players=2)
+    return OpenSpielState(game.new_initial_state(), hash_board=True)
 
 def mcts_agent_factory(state: State, num_simulations: int) -> TreeAgent:
     return MCTS(state, config=MCTSConfig(num_simulations=num_simulations))

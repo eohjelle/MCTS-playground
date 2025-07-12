@@ -1,8 +1,8 @@
 import unittest
 from typing import Dict, List
 
-from core.algorithms.AlphaZero import AlphaZero, AlphaZeroConfig
-from core.state import State
+from mcts_playground.algorithms.AlphaZero import AlphaZero, AlphaZeroConfig
+from mcts_playground.state import State
 
 # ---------------------------------------------------------------------------
 # Minimal deterministic two-player game for testing

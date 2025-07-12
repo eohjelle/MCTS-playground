@@ -1,5 +1,4 @@
-from core.algorithms import MCTS, AlphaZero, AlphaZeroEvaluation, AlphaZeroConfig, MCTSConfig
-from core import State, OpenSpielState, ModelPredictor, StandardWinLossTieEvaluator
+from mcts_playground import *
 
 import pyspiel
 import math
@@ -17,7 +16,7 @@ class DummyModelPredictor(ModelPredictor[int, AlphaZeroEvaluation[int, int]]):
 
 def test_openspiel_state_with_alphazero_vs_mcts_on_breakthrough():
     game = pyspiel.load_game('breakthrough')
-    state_generator = lambda: OpenSpielState(game.new_initial_state(), num_players=2)
+    state_generator = lambda: OpenSpielState(game.new_initial_state(), hash_board=True)
     predictor = DummyModelPredictor()
     evaluator = StandardWinLossTieEvaluator(
         initial_state_creator=state_generator,

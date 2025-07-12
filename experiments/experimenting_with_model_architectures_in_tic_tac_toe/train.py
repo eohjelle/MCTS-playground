@@ -1,10 +1,10 @@
-from core import AlphaZeroTrainingAdapter, AlphaZeroConfig, TrainerConfig, Trainer, RandomAgent, StandardWinLossTieEvaluator, MCTS, MCTSConfig, State, Minimax
+from mcts_playground import AlphaZeroTrainingAdapter, AlphaZeroConfig, TrainerConfig, Trainer, RandomAgent, StandardWinLossTieEvaluator, MCTS, MCTSConfig, State, Minimax
 from absl import app, flags
-from core.agent import TreeAgent
+from mcts_playground.agent import TreeAgent
 from .models.mlp_model import TicTacToeMLP, MLPInitParams
 from .models.resmlp import ResMLP, ResMLPInitParams
 from .tensor_mapping import MLPTensorMapping, TokenizedTensorMapping
-from core.games.tic_tac_toe import TicTacToeState
+from mcts_playground.games.tic_tac_toe import TicTacToeState
 import torch
 
 FLAGS = flags.FLAGS

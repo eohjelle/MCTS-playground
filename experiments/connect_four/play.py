@@ -1,11 +1,7 @@
 from typing import Tuple, Union, Optional, Dict
 import pyspiel
 import torch
-
-from core import Model, ModelPredictor
-from core.algorithms.AlphaZero import AlphaZero, AlphaZeroModelAgent, AlphaZeroConfig
-from core.algorithms import MCTS, MCTSConfig, RandomAgent
-from core.games.open_spiel_state_wrapper import OpenSpielState
+from mcts_playground import Model, ModelPredictor, AlphaZero, AlphaZeroModelAgent, AlphaZeroConfig, MCTS, MCTSConfig, RandomAgent, OpenSpielState
 from experiments.connect_four.models.resnet import ResNet, ResNetInitParams
 from experiments.connect_four.tensor_mapping import ConnectFourTensorMapping, LayeredConnectFourTensorMapping
 

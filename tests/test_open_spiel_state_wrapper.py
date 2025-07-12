@@ -1,7 +1,7 @@
 import unittest
 import pyspiel
-from core.games.open_spiel_state_wrapper import OpenSpielState
-from core.algorithms.MCTS import MCTS, MCTSConfig
+from mcts_playground.games.open_spiel_state_wrapper import OpenSpielState
+from mcts_playground.algorithms.MCTS import MCTS, MCTSConfig
 
 
 class MockOpenSpielState:
@@ -96,7 +96,7 @@ class TestOpenSpielStateWrapper(unittest.TestCase):
     def test_initial_state_rewards(self):
         """Test that initial state has zero rewards for all players."""
         initial_spiel_state = self.connect_four_game.new_initial_state()
-        state = OpenSpielState(initial_spiel_state, num_players=2)
+        state = OpenSpielState(initial_spiel_state, hash_board=True)
         
         expected_rewards = {0: 0.0, 1: 0.0}
         self.assertEqual(state.rewards(), expected_rewards)
@@ -104,7 +104,7 @@ class TestOpenSpielStateWrapper(unittest.TestCase):
     def test_rewards_immutable_after_creation(self):
         """Test that accessing rewards multiple times doesn't change them."""
         initial_spiel_state = self.connect_four_game.new_initial_state()
-        state = OpenSpielState(initial_spiel_state, num_players=2)
+        state = OpenSpielState(initial_spiel_state, hash_board=True)
         
         # Access rewards multiple times
         rewards1 = state.rewards()
@@ -119,7 +119,7 @@ class TestOpenSpielStateWrapper(unittest.TestCase):
     def test_intermediate_moves_rewards(self):
         """Test that intermediate moves have zero rewards."""
         initial_spiel_state = self.connect_four_game.new_initial_state()
-        state = OpenSpielState(initial_spiel_state, num_players=2)
+        state = OpenSpielState(initial_spiel_state, hash_board=True)
         
         # Make some intermediate moves
         state.apply_action(3)  # Player 0 plays column 3
@@ -131,7 +131,7 @@ class TestOpenSpielStateWrapper(unittest.TestCase):
     def test_simulated_intermediate_rewards(self):
         """Test intermediate rewards using a mock game that gives rewards during play."""
         mock_state = MockOpenSpielState()
-        state = OpenSpielState(mock_state, num_players=2)
+        state = OpenSpielState(mock_state, hash_board=True)
         
         # Initial state should have zero rewards
         self.assertEqual(state.rewards(), {0: 0.0, 1: 0.0})
@@ -169,7 +169,7 @@ class TestOpenSpielStateWrapper(unittest.TestCase):
     def test_simulated_intermediate_rewards_with_state_reuse(self):
         """Test intermediate rewards with state dictionary reuse (the bug scenario)."""
         mock_state = MockOpenSpielState()
-        state = OpenSpielState(mock_state, num_players=2)
+        state = OpenSpielState(mock_state, hash_board=True)
         
         # Simulate MCTS state_dict
         state_dict = {}
@@ -187,7 +187,7 @@ class TestOpenSpielStateWrapper(unittest.TestCase):
         
         # Create another path to same state
         mock_state2 = MockOpenSpielState()
-        state2 = OpenSpielState(mock_state2, num_players=2)
+        state2 = OpenSpielState(mock_state2, hash_board=True)
         
         for move in moves:
             if (not state2.is_terminal) and (move in state2.legal_actions):
@@ -216,7 +216,7 @@ class TestOpenSpielStateWrapper(unittest.TestCase):
         """Test that terminal state rewards remain consistent across multiple accesses."""
         # Create a tic-tac-toe game and play to completion
         initial_spiel_state = self.tic_tac_toe_game.new_initial_state()
-        state = OpenSpielState(initial_spiel_state, num_players=2)
+        state = OpenSpielState(initial_spiel_state, hash_board=True)
         
         # Play a sequence that leads to player 0 winning
         moves = [0, 3, 1, 4, 2]  # Top row for player 0
@@ -242,7 +242,7 @@ class TestOpenSpielStateWrapper(unittest.TestCase):
     def test_connect_four_winning_scenario(self):
         """Test the specific Connect Four winning scenario that caused the original MCTS bug."""
         initial_spiel_state = self.connect_four_game.new_initial_state()
-        state = OpenSpielState(initial_spiel_state, num_players=2)
+        state = OpenSpielState(initial_spiel_state, hash_board=True)
         
         # Create a scenario where player 0 can win by playing column 2
         # This simulates a late-game position where a winning move is available
@@ -297,7 +297,7 @@ class TestOpenSpielStateWrapper(unittest.TestCase):
     def test_state_dict_reuse_scenario(self):
         """Test the specific scenario that caused the MCTS bug: state reuse via state_dict."""
         initial_spiel_state = self.tic_tac_toe_game.new_initial_state()
-        initial_state = OpenSpielState(initial_spiel_state, num_players=2)
+        initial_state = OpenSpielState(initial_spiel_state, hash_board=True)
         
         # Simulate what happens in MCTS: create a state_dict
         state_dict = {}
@@ -341,7 +341,7 @@ class TestOpenSpielStateWrapper(unittest.TestCase):
     def test_clone_preserves_rewards(self):
         """Test that cloning properly preserves reward state."""
         initial_spiel_state = self.tic_tac_toe_game.new_initial_state()
-        state = OpenSpielState(initial_spiel_state, num_players=2)
+        state = OpenSpielState(initial_spiel_state, hash_board=True)
         
         # Play to terminal state
         moves = [0, 3, 1, 4, 2]  # Top row for player 0
@@ -366,7 +366,7 @@ class TestOpenSpielStateWrapper(unittest.TestCase):
     def test_mcts_integration(self):
         """Integration test: verify MCTS works correctly with the fixed rewards."""
         initial_spiel_state = self.tic_tac_toe_game.new_initial_state()
-        initial_state = OpenSpielState(initial_spiel_state, num_players=2)
+        initial_state = OpenSpielState(initial_spiel_state, hash_board=True)
         
         # Create an MCTS agent
         mcts_config = MCTSConfig(num_simulations=50, exploration_constant=1.414)
@@ -383,19 +383,19 @@ class TestOpenSpielStateWrapper(unittest.TestCase):
         """Test reward handling works for different types of games."""
         # Test Connect Four
         cf_initial = self.connect_four_game.new_initial_state()
-        cf_state = OpenSpielState(cf_initial, num_players=2)
+        cf_state = OpenSpielState(cf_initial, hash_board=True)
         self.assertEqual(cf_state.rewards(), {0: 0.0, 1: 0.0})
         
         # Test Tic-tac-toe
         ttt_initial = self.tic_tac_toe_game.new_initial_state()
-        ttt_state = OpenSpielState(ttt_initial, num_players=2)
+        ttt_state = OpenSpielState(ttt_initial, hash_board=True)
         self.assertEqual(ttt_state.rewards(), {0: 0.0, 1: 0.0})
     
     def test_draw_scenario(self):
         """Test rewards are handled correctly in draw scenarios."""
         # Create a tic-tac-toe draw scenario
         initial_spiel_state = self.tic_tac_toe_game.new_initial_state()
-        state = OpenSpielState(initial_spiel_state, num_players=2)
+        state = OpenSpielState(initial_spiel_state, hash_board=True)
         
         # Play moves that lead to a draw
         draw_moves = [4, 0, 8, 2, 6, 3, 1, 5, 7]  # This should result in a draw

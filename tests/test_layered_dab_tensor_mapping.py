@@ -1,6 +1,6 @@
 import numpy as np
 import torch as t
-from core.games.dots_and_boxes import DotsAndBoxesState, CellType
+from mcts_playground.games.dots_and_boxes import DotsAndBoxesState, CellType
 from experiments.dots_and_boxes_experiments.encoder import LayeredDABTensorMapping
 
 def test_encode_states_shape():

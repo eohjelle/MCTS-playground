@@ -1,11 +1,11 @@
 import torch as t
 import numpy as np
-from core.games.dots_and_boxes import DotsAndBoxesState, DotsAndBoxesAction, DotsAndBoxesPlayer, CellType
+from mcts_playground.games.dots_and_boxes import DotsAndBoxesState, DotsAndBoxesAction, DotsAndBoxesPlayer, CellType
 import torch.nn.functional as F
 from typing import Dict, Tuple, Any, List
-from core import TensorMapping
-from core.algorithms.AlphaZero import AlphaZeroEvaluation
-from core.data_structures import TrainingExample
+from mcts_playground import TensorMapping
+from mcts_playground.algorithms.AlphaZero import AlphaZeroEvaluation
+from mcts_playground.data_structures import TrainingExample
 
 # Functions to convert between edge coordinates and flat indices.
 # The edges are enumerated by first listing all vertical edges (left to right, top to bottom),

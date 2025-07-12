@@ -4,7 +4,7 @@ import pyspiel
 
 from experiments.connect_four.models.resnet import ResNet
 from experiments.connect_four.tensor_mapping import LayeredConnectFourTensorMapping
-from core.games.open_spiel_state_wrapper import OpenSpielState
+from mcts_playground.games.open_spiel_state_wrapper import OpenSpielState
 
 
 class TestResNetWithLayeredMapping(unittest.TestCase):
@@ -27,7 +27,7 @@ class TestResNetWithLayeredMapping(unittest.TestCase):
 
     def _create_states(self):
         # Create an initial state and one after a single move to vary current_player.
-        s1 = OpenSpielState(self.game.new_initial_state(), num_players=2)
+        s1 = OpenSpielState(self.game.new_initial_state(), hash_board=True)
         s2 = s1.clone()
         s2.apply_action(3)  # middle column move
         return [s1, s2]

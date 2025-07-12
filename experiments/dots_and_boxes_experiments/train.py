@@ -1,11 +1,11 @@
-from core import AlphaZeroTrainingAdapter, AlphaZeroConfig, TrainerConfig, Trainer, RandomAgent, StandardWinLossTieEvaluator, MCTS, MCTSConfig, State, ReplayBuffer
+from mcts_playground import AlphaZeroTrainingAdapter, AlphaZeroConfig, TrainerConfig, Trainer, RandomAgent, StandardWinLossTieEvaluator, MCTS, MCTSConfig, State, ReplayBuffer
 from absl import app, flags
-from core.agent import TreeAgent
+from mcts_playground.agent import TreeAgent
 from .NNmodels.MLP import MLPInitParams, MLP
 from .NNmodels.transformer import TransformerInitParams, DotsAndBoxesTransformer
 from .NNmodels.linear_attention_transformer import LinearAttentionTransformerInitParams, LinearAttentionTransformer
 from .NNmodels.resnet import ResNetInitParams, ResNet
-from core.games.dots_and_boxes import DotsAndBoxesState
+from mcts_playground.games.dots_and_boxes import DotsAndBoxesState
 from .encoder import DABTensorMapping, LayeredDABTensorMapping
 import torch
 import functools

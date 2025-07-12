@@ -3,8 +3,8 @@ import torch
 import pyspiel
 from typing import Dict, List, Tuple
 
-from core.games.open_spiel_state_wrapper import OpenSpielState
-from core.data_structures import TrainingExample
+from mcts_playground.games.open_spiel_state_wrapper import OpenSpielState
+from mcts_playground.data_structures import TrainingExample
 from experiments.connect_four.tensor_mapping import ConnectFourTensorMapping
 
 class TestConnectFourTensorMapping(unittest.TestCase):
@@ -18,7 +18,7 @@ class TestConnectFourTensorMapping(unittest.TestCase):
 
     def test_encode_states(self):
         # Initial state, player 0 to move
-        state1 = OpenSpielState(self.game.new_initial_state(), num_players=2)
+        state1 = OpenSpielState(self.game.new_initial_state(), hash_board=True)
         
         # Player 0 plays action 3
         state2 = state1.clone()
@@ -45,7 +45,7 @@ class TestConnectFourTensorMapping(unittest.TestCase):
         self.assertTrue(torch.equal(encoded_states[1], expected2))
 
     def test_decode_outputs(self):
-        state = OpenSpielState(self.game.new_initial_state(), num_players=2)
+        state = OpenSpielState(self.game.new_initial_state(), hash_board=True)
         policy_logits = torch.randn(1, self.num_cols, device=self.device)
         value = torch.tensor([[0.5]], device=self.device)
         outputs = {"policy": policy_logits, "value": value}
@@ -66,7 +66,7 @@ class TestConnectFourTensorMapping(unittest.TestCase):
         self.assertEqual(values[1 - state.current_player], -0.5)
 
     def test_encode_targets(self):
-        state = OpenSpielState(self.game.new_initial_state(), num_players=2)
+        state = OpenSpielState(self.game.new_initial_state(), hash_board=True)
         policy_dict = {action: 1.0 / len(state.legal_actions) for action in state.legal_actions}
         value = 0.8
         target = (policy_dict, value)

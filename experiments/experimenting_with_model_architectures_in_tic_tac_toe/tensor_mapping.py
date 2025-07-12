@@ -1,9 +1,9 @@
-from core import TensorMapping, TrainingExample
+from mcts_playground import TensorMapping, TrainingExample
 from typing import Tuple, Dict, Any, List
 import torch
-from core.data_structures import TrainingExample
-from core.games.tic_tac_toe import TicTacToeState
-from core.algorithms.AlphaZero import AlphaZeroEvaluation
+from mcts_playground.data_structures import TrainingExample
+from mcts_playground.games.tic_tac_toe import TicTacToeState
+from mcts_playground.algorithms.AlphaZero import AlphaZeroEvaluation
 import torch.nn.functional as F
 
 class BaseTensorMapping(TensorMapping[Tuple[int, int], AlphaZeroEvaluation]):

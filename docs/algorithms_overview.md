@@ -1,11 +1,11 @@
-This document contains an overview of the main algorithms implemented in the [core repository](../core/).
+This document contains an overview of the main algorithms implemented in [`mcts_playground`](../mcts_playground/).
 
 # Abstract MCTS
 
 Implementation references:
 
-- Abstract MCTS: [`tree_search.py`](../core/tree_search.py)
-- Vanilla MCTS: [`MCTS.py`](../core/algorithms/MCTS.py).
+- Abstract MCTS: [`tree_search.py`](../mcts_playground/tree_search.py)
+- Vanilla MCTS: [`MCTS.py`](../mcts_playground/algorithms/MCTS.py).
 
 Monte Carlo Tree Search (MCTS) often refers to a family of algorithms, including AlphaZero, but strictly speaking it is also a [specific algorithm](https://en.wikipedia.org/wiki/Monte_Carlo_tree_search). To avoid ambiguity, I will distinguish the specific algorithm from a _template algorithm_ that I will refer to as _abstract MCTS_, serving as a common ground for both vanilla MCTS and AlphaZero.
 
@@ -22,7 +22,7 @@ In vanilla MCTS, selection is done using the [Upper Confidence bound for Trees (
 
 # AlphaZero
 
-Implementation reference: [`AlphaZero.py`](../core/algorithms/AlphaZero.py).
+Implementation reference: [`AlphaZero.py`](../mcts_playground/algorithms/AlphaZero.py).
 
 AlphaZero follows the abstract MCTS template, and differs from vanilla MCTS in two places. The first is using a deep learning model to evaluate leaf nodes. The second is by also using the deep learning model to inform exploration in the selection process.
 
