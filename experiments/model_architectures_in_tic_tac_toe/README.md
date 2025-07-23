@@ -38,4 +38,8 @@ Here are some images of attention masks for transformer with masked simple atten
 
 ![Head 1 attention pattern](plots/tic_tac_toe_head_1.png)
 
+### MCTS benchmark
+
+MCTS with various numbers of iterations serve as simple players to measure performance against. The minimax player achieves perfect play, so it can be useful to benchmark MCTS against it.
+
 ![Tic tac toe MCTS benchmark](plots/tic_tac_toe_mcts_benchmark.png)
