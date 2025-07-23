@@ -24,7 +24,7 @@ In vanilla MCTS, selection is done using the [Upper Confidence bound for Trees (
 
 Implementation reference: [`AlphaZero.py`](../mcts_playground/algorithms/AlphaZero.py).
 
-AlphaZero follows the abstract MCTS template, and differs from vanilla MCTS in two places. The first is using a deep learning model to evaluate leaf nodes. The second is by also using the deep learning model to inform exploration in the selection process.
+[AlphaZero](https://arxiv.org/abs/1712.01815) follows the abstract MCTS template, and differs from vanilla MCTS in two places. The first is using a deep learning model to evaluate leaf nodes. The second is by also using the deep learning model to inform exploration in the selection process.
 
 AlphaZero stores the following values in an edge $(s,a)$:
 
@@ -48,7 +48,7 @@ $$ U(s, a) = P(s, a) \frac{\sqrt{\sum_b N(s, b)}}{1 + N(s, a)} c \quad \text{(us
 
 $$ U(s, a) = P(s, a) \frac{\sqrt{\sum_b N(s, b)}}{1 + N(s, a)} \left( c_1 + \log \left( \frac{\sum_b N(s, b) + c_2 + 1}{c_2} \right) \right) \quad \text{(used in MuZero), } $$
 
-where $c, c_1, c_2$ are constants. For example, $c_1 = 1.25$ and $c_2 = 19652$ in [MuZero](https://arxiv.org/abs/1911.08265) (see page 12). The implementation in this repository uses the first formula with default value $c=1.25$.
+where $c, c_1, c_2$ are constants. The value of $c$ is not specified in the AlphaGo Zero paper, so the implementation in this repository uses the first formula with a default value of $c=1.25$, adopting the value of $c_1$ from the [MuZero paper](https://arxiv.org/abs/1911.08265) (page 12), which specifies $c_1 = 1.25$ and $c_2 = 19652$. Because of the large value of $c_2$, the $\log$ term involving $c_2$ only becomes significant for a large number of simulations.
 
 ##### 2. Expansion and evaluation
 
@@ -56,7 +56,7 @@ After reaching the leaf node $s^l$, invoke the function $f_\theta$ to compute $\
 
 ##### 3. Update
 
-The visit counts are incremented and expected rewards updated. Specifically, using the following assignments:
+The visit counts are incremented and expected rewards updated as in vanilla MCTS. Specifically, using the following assignments:
 
 $$ N(s^k, a^k) \leftarrow N(s^k, a^k) + 1 \quad \text{for }k = 0, 1, \dots, l-1, $$
 
@@ -72,7 +72,9 @@ $$ \pi_a \propto N(s^0, a)^{1/t} , $$
 
 where $t \geq 0$ is a fixed temperature hyperparameter.
 
-One technical point not yet mentioned is the Dirichlet noise injected by AlphaZero at the root node. Whereas the prior policy $P(s, a)$ is dictated by the model policy $\mathbf{p}_a$ at _non-root nodes_ $s$, at the root node it is given by $P(s, a) = (1 - \epsilon) \mathbf{p}_a + \epsilon \mathbf{q}_a$, where $\mathbf{q} \sim \text{Dir}(\alpha, \alpha, \dots, \alpha)$ is sampled from a Dirichlet distribution. The hyperparameters $\alpha > 0$ and $\epsilon \in [0, 1]$ are fixed; the case $\epsilon = 0$ corresponds to no Dirichlet noise.
+##### Dirichlet noise
+
+One technical point not yet mentioned is the Dirichlet noise injected by AlphaZero at the root node in order to improve exploration of new strategies. Whereas the prior policy $P(s, a)$ is dictated by the model policy $\mathbf{p}_a$ at _non-root nodes_ $s$, at the root node it is given by $P(s, a) = (1 - \epsilon) \mathbf{p}_a + \epsilon \mathbf{q}_a$, where $\mathbf{q} \sim \text{Dir}(\alpha)$ is sampled from a [symmetric Dirichlet distribution](https://en.wikipedia.org/wiki/Dirichlet_distribution#Special_cases). The hyperparameters $\alpha > 0$ and $\epsilon \in [0, 1]$ are fixed, where the case $\epsilon = 0$ corresponds to no Dirichlet noise. The value of $\alpha$ is typically set in inverse proportion to the branching factor of the game; in the AlphaZero paper they used a value of 0.3 for chess, 0.15 for shogi, and 0.03 for Go. The [AlphaGo Zero paper](https://www.nature.com/articles/nature24270) mentions a value of $\epsilon = 0.25$.
 
 ## Training the deep learning model
 
@@ -88,4 +90,21 @@ From the perspective of training the model, the purpose of MCTS is that of provi
 
 > In each position $s$, an MCTS search is executed, guided by the neural network $f_\theta$. The MCTS search outputs probabilities $\pi$ of playing each move. These search probabilities usually select much stronger moves than the raw move probabilities $\mathbf{p}$ of the neural network $f_\theta(s)$; MCTS may therefore be viewed as a powerful _policy improvement operator_.
 
-The outcome of the game provides the ground truth for the values, but alternatively as target values one can use the posterior value at the root node after the tree search, similarly to the policy target. This is the approach used in MuZero and many other variations of AlphaZero.
+An alternative target for the value $v$ predicted by $f_\theta$ is the value at the root node after the tree search, similarly to the policy target. This is the approach used in many algorithms building on AlphaZero, including MuZero. Using this target value reduces noise in the loss, but the cost is a weaker signal further removed from the ground truth (the actual game outcome).
+
+## Hyperparameter values
+
+The algorithm and training procedure described above relies on a number of hyperparameters. Here is the complete list of hyperparameters used in the implementation reference, and their default values:
+
+AlphaZero hyperparameters:
+
+- `num_simulations`: This is the number of times the abstract MCTS algorithm is iterated before choosing an action. The default value is 800 during training, following the AlphaZero paper.
+- `exploration_constant`: The value of $c$ used in the PUCT formula in the selection step. The default value is $c = 1.25$ for the reasons explained in [the selection section](#1-selection).
+- `dirichlet_alpha`: The value of $\alpha$ used for sampling Dirichlet noise. The default value is 0.3, following the value used in the AlphaZero paper for chess.
+- `dirichlet_epsilon`: The value of $\epsilon$ used for adding Dirichlet noise to the prior policy at the root node. The default value is 0.25, following the AlphaGo Zero paper.
+- `temperature`: The default value is 1.0 (for data generation), meaning actions are selected proportionally to visit count. For evaluation, it is standard to use temperature 0.0. The AlphaGo Zero paper mentions playing games with temperature 1.0 for the first 30 moves of each game to reach a diverse set of positions, and using temperature 0.0 after the first 30 moves. The MuZero paper uses a temperature decay, starting with temperature 1.0, then decaying to 0.5 and eventually 0.25.
+
+Additional training hyperparameters:
+
+- `value_softness`: Should be between 0 and 1, setting the value target to be an interpolation of the game outcome and the root node value (which was mentioned as an alternative target value under [training remarks](#remarks)). The default value is 0.0, corresponding to using game outcomes as target values, following the AlphaZero paper.
+- `mask_value`: The policy logits of the deep learning model are over all possible moves in the game, but typically not all of them correspond to _legal_ actions at the current state. The standard way to deal with this problem is to "mask out" the illegal moves. The Deepmind papers don't discuss this in detail, so we follow the recommendation of [this paper](https://arxiv.org/pdf/2006.14171). The mask should be a large negative number, but not too large to avoid NaNs. The default value used is -1e4, which is small enough to avoid overflow issues when casting to `bfloat16`.

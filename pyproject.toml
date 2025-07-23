@@ -22,5 +22,5 @@ dependencies = [
 [project.optional-dependencies]
 open_spiel = ["open_spiel"] # If not installing from source (as in install.sh)
 
-[tool.setuptools.packages.find]
-where = ["mcts_playground"] 
+[tool.setuptools]
+packages = ["mcts_playground"] 

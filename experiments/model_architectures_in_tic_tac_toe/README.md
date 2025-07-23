@@ -16,26 +16,23 @@ Our tic tac toe experiments are centered around experimenting with different mod
 
 # Exploration of different models using supervised learning
 
-We used a minimax model to generate examples of perfect play.
-
-For tic tac toe we have explored a few different classes of models:
+We used a minimax model to generate examples of perfect play. This can be used as training/test data for supervised learning experiments with different model architectures. Here are some we tried:
 
 1. Standard MLPs
 2. Variant of standard MLP with residual connection ("ResMLP")
 3. Traditional transformers
-4. Transformers with masked simple attention
-5. Transformers with dynamic masked simple attention
+4. Experimental transformer architecture with masked simple attention
 
-Here's an overview of our findings.
+A short overview of our findings:
 
 - All models can achieve perfect play, but some train much faster than others.
-- The ResMLP is superior to the MLP.
-- The MLPs train quickly, but need orders of magnitude more parameters than some of our other models for comparable performance.
-- Traditional transformers do not perform very well.
+- The ResMLP learns fast than the MLP and may be the best model overall.
+- Traditional transformers seem to need a lot more parameters than other models.
 - A transformer with masked simple attention achieves minimal loss and perfect play with ~14k parameters.
-- Transformers with dynamic masked simple attention. The smolgen-like mask, which depends on the input state, adds extra parameters, and it's difficult to prevent the model from overfitting. even with only around ~20k parameters.
 
-### Interpretability of the
+### Interpretability
+
+Here are some images of attention masks for transformer with masked simple attention:
 
 ![Attention mask](plots/tic_tac_toe_attn_mask.png)
 

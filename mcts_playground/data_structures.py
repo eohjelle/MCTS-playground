@@ -56,7 +56,6 @@ class ReplayBuffer:
         """Return the number of examples in the buffer."""
         return self.current_size
 
-    # TODO: Check why this seems to no be working (legal moves remain 0 for dots and boxes simple tensor mapping)
     def add(
         self, 
         states: torch.Tensor,
@@ -71,15 +70,12 @@ class ReplayBuffer:
             self.targets = {key: torch.empty(self.max_size, *tensor.shape[1:], dtype=tensor.dtype, device=self.device) for key, tensor in targets.items()}
             self.extra_data = {key: torch.empty(self.max_size, *tensor.shape[1:], dtype=tensor.dtype, device=self.device) for key, tensor in extra_data.items()}
 
-        # Move data to device and verify the number of examples
-        states = states.to(self.device)
+        # Verify the number of examples
         length = states.shape[0]
         for key in targets.keys():
             assert targets[key].shape[0] == length, "Target tensors must have the same length as states."
-            targets[key] = targets[key].to(self.device)
         for key in extra_data.keys():
             assert extra_data[key].shape[0] == length, "Extra data tensors must have the same length as states."
-            extra_data[key] = extra_data[key].to(self.device)
 
         self.current_size = min(self.current_size + states.shape[0], self.max_size)
 

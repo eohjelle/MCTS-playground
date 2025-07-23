@@ -40,6 +40,16 @@ def mcts400_agent_factory(state: State) -> TreeAgent:
 def mcts800_agent_factory(state: State) -> TreeAgent:
     return MCTS(state, config=MCTSConfig(num_simulations=800))
 
+# TODO: remove the two agents below
+def mcts1600_agent_factory(state: State) -> TreeAgent: 
+    return MCTS(state, config=MCTSConfig(num_simulations=1600))
+
+def mcts3200_agent_factory(state: State) -> TreeAgent:
+    return MCTS(state, config=MCTSConfig(num_simulations=3200))
+
+def mcts10000_agent_factory(state: State) -> TreeAgent:
+    return MCTS(state, config=MCTSConfig(num_simulations=10000))
+
 def main(argv):
     match FLAGS.model:
         case 'resmlp':
@@ -68,14 +78,15 @@ def main(argv):
         buffer_path = None
 
 
+    batch_size = 256
     config = TrainerConfig(
         model_architecture=model_architecture,
         model_params=model_params,
-        algorithm_params=AlphaZeroConfig(dirichlet_epsilon=0.0), # No Dirichlet noise, otherwise default AlphaZero hyperparameters
+        algorithm_params=AlphaZeroConfig(dirichlet_alpha=1.0), # Only 7 moves means that uniform noise is good. Otherwise use default AlphaZero hyperparameters
         checkpoint_dir=f"checkpoints/connect_four/{FLAGS.name or 'default'}",
         tensor_mapping=tensor_mapping,
         training_adapter=AlphaZeroTrainingAdapter(
-            value_softness=1.0
+            value_softness=1.0 # Use MCTS value estimates as target values
         ), 
         create_initial_state=state_factory,
         optimizer=torch.optim.Adam,
@@ -96,13 +107,16 @@ def main(argv):
         evaluator=StandardWinLossTieEvaluator(
             initial_state_creator=state_factory,
             opponents_creators={
-                "random": [random_agent_factory],
-                "mcts50": [mcts50_agent_factory],
-                "mcts100": [mcts100_agent_factory],
-                "mcts400": [mcts400_agent_factory],
-                "mcts800": [mcts800_agent_factory],
+                # "random": [random_agent_factory],
+                # "mcts50": [mcts50_agent_factory],
+                # "mcts100": [mcts100_agent_factory],
+                # "mcts400": [mcts400_agent_factory],
+                # "mcts800": [mcts800_agent_factory],
+                # "mcts1600": [mcts1600_agent_factory], # TODO: Remove high level MCTS players
+                # "mcts3200": [mcts3200_agent_factory],
+                "mcts10000": [mcts10000_agent_factory],
             },
-            num_games=10
+            num_games=50 # TODO: Reset to 10
         ),
         evaluator_algorithm_params=AlphaZeroConfig(temperature=0.0, dirichlet_epsilon=0.0, num_simulations=100), # Use temperature 0.0 for evaluation, no dirichlet noise, fewer simulations to compare against stronger MCTS players
         log_level=FLAGS.log_level,
@@ -112,20 +126,20 @@ def main(argv):
         wandb_run_name=FLAGS.name,
         wandb_run_id=FLAGS.run_id,
         resume_from_last_checkpoint=FLAGS.resume,
-        learning_batch_size=256,
+        learning_batch_size=batch_size,
         wandb_save_artifacts=True,
         checkpoint_frequency_hours=5.0,
         load_model_from_path=FLAGS.model_path,
         load_replay_buffer_from_path=buffer_path,
         num_actors=FLAGS.num_actors if not FLAGS.supervised else 0,
-        learning_min_buffer_size = 30 * 256,
-        buffer_max_size = 150 * 256,
-        learning_min_new_examples_per_step = 1 * 256 if not FLAGS.supervised else 0,
+        learning_min_buffer_size = 30 * batch_size,
+        buffer_max_size = 100 * batch_size,
+        learning_min_new_examples_per_step = 1 * batch_size if not FLAGS.supervised else 0,
     )
 
-    trainer = Trainer(config)
-    trainer()
-    # trainer.run_evaluator()
+    trainer = Trainer(config)    
+    # trainer()
+    trainer.run_evaluator()
 
 if __name__ == "__main__":
     app.run(main)

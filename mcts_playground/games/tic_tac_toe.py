@@ -31,7 +31,6 @@ class TicTacToeState(State[TicTacToeAction, TicTacToePlayer]):
     def is_terminal(self) -> bool:
         return self._get_winner() is not None or len(self.legal_actions) == 0
     
-    @property
     def rewards(self) -> Dict[TicTacToePlayer, float]:
         """Return rewards for all players as a dictionary."""
         winner = self._get_winner()

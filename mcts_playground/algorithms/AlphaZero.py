@@ -36,9 +36,9 @@ AlphaZeroEvaluation = Tuple[Dict[ActionType, float], Dict[PlayerType, float]]
 class AlphaZeroConfig(AlgorithmParams):
     # Default values based on original AlphaZero paper (Silver et al., 2017)
     num_simulations: int = 800  # 800 for board games, 50 for Atari-like games
-    exploration_constant: float = 1.25  # c_puct value from original paper (c1=1.25, c2=19652)
-    dirichlet_alpha: float = 0.3  # 0.3 for Chess, 0.15 for Shogi, 0.03 for Go
-    dirichlet_epsilon: float = 0.25  # Standard value from AlphaZero paper
+    exploration_constant: float = 1.25  # Estimate based on values in the MuZero paper (c1=1.25, c2=19652)
+    dirichlet_alpha: float = 0.3  # Inversely proportional to branching factor in AlphaZero paper: 0.3 for Chess, 0.15 for Shogi, 0.03 for Go
+    dirichlet_epsilon: float = 0.25  # Value from AlphaGo Zero paper
     temperature: float = 1.0  # Initial temperature, typically decayed during training
 
 class AlphaZero(TreeSearch[ActionType, AlphaZeroValue, AlphaZeroEvaluation, PlayerType], Generic[ActionType, PlayerType]):
@@ -174,7 +174,7 @@ class AlphaZeroTrainingAdapter(TrainingAdapter[ActionType, AlphaZeroEvaluation])
             value_softness: Controls mixing of game outcome with neural network value estimates
                           for training targets. Default 0.0 matches original AlphaZero paper
                           where training values are purely the game outcomes (win/loss/draw).
-                          Non-zero values mix in the network's own value estimates, which can
+                          Non-zero values mix in the MCTS value estimates, which can
                           help with training stability but deviates from the original algorithm.
                           Range: [0.0, 1.0] where 0.0 = pure game outcome, 1.0 = pure network estimate.
         """
