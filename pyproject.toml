@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mcts-playground"
 version = "0.1.0"
-description = "Modular AlphaZero / MCTS research playground"
+description = "A modular Python framework for AlphaZero and MCTS research"
 authors = [{ name = "Eivind Otto Hjelle", email = "eohjelle@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.9"
