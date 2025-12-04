@@ -12,7 +12,10 @@ from mcts_playground import (
 )
 from absl import app, flags
 from .models import ResMLP, ResMLPInitParams, ResNet, ResNetInitParams
-from .tensor_mapping import ConnectFourTensorMapping, LayeredConnectFourTensorMapping
+from .tensor_mapping import (
+    ConnectFourQuantileTensorMapping,
+    LayeredConnectFourCategoricalTensorMapping,
+)
 import torch
 import pyspiel
 
@@ -58,7 +61,10 @@ def mcts800_agent_factory(state: State) -> TreeAgent:
 
 def main(argv):
     batch_size = 256
-    default_config = DistributionalAlphaZeroConfig()
+    default_config = DistributionalAlphaZeroConfig(
+        num_categories=51,
+        value_distribution_support=(-1.0, 1.0),
+    )
     match FLAGS.model:
         case "resmlp":
             model_architecture = ResMLP
@@ -67,22 +73,22 @@ def main(argv):
                 num_residual_blocks=7,
                 residual_dim=64,
                 hidden_size=256,
-                n_quantiles=default_config.num_quantiles,
-                initial_support=(-1.0, 1.0),
+                n_quantiles=default_config.num_categories,
+                initial_support=default_config.value_distribution_support,
             )
-            tensor_mapping = ConnectFourTensorMapping()
+            tensor_mapping = ConnectFourQuantileTensorMapping()
             tm_type = "flat"
         case "resnet":
             model_architecture = ResNet
             model_params = ResNetInitParams(
-                in_channels=2,
+                in_channels=3,
                 num_residual_blocks=5,
                 channels=64,
                 rows=6,
                 cols=7,
-                output_dim=100,
+                output_dim=default_config.num_categories,
             )
-            tensor_mapping = LayeredConnectFourTensorMapping()
+            tensor_mapping = LayeredConnectFourCategoricalTensorMapping()
             tm_type = "layered"
         case _:
             raise ValueError(f"Invalid model type: {FLAGS.model}")
@@ -128,7 +134,11 @@ def main(argv):
             },
             num_games=10,
         ),
-        evaluator_algorithm_params=DistributionalAlphaZeroConfig(temperature=0.0),
+        evaluator_algorithm_params=DistributionalAlphaZeroConfig(
+            temperature=0.0,
+            num_categories=default_config.num_categories,
+            value_distribution_support=default_config.value_distribution_support,
+        ),
         log_level=FLAGS.log_level,
         log_file_level=FLAGS.file_log_level,
         max_training_time_hours=FLAGS.max_time,

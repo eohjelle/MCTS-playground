@@ -3,15 +3,14 @@ from typing import List, Dict, Tuple, Any
 import numpy as np
 
 from mcts_playground import TensorMapping
-from .DistributionalAlphaZero import Distribution
 from mcts_playground.data_structures import TrainingExample
 from mcts_playground.games.open_spiel_state_wrapper import OpenSpielState
 
 from .types import ModelOutput
 
 
-class ConnectFourTensorMapping(TensorMapping[int, ModelOutput]):
-    """Tensor mapping compatible with Connect 4 (via OpenSpielState) and TSDS."""
+class ConnectFourQuantileTensorMapping(TensorMapping[int, ModelOutput]):
+    """Tensor mapping compatible with Connect 4 (via OpenSpielState) and TSDS (Quantile Regression)."""
 
     @staticmethod
     def get_game_info(states: List[OpenSpielState]) -> Tuple[int, int, int]:
@@ -29,7 +28,9 @@ class ConnectFourTensorMapping(TensorMapping[int, ModelOutput]):
         if not states:
             return torch.empty(0, device=device)
 
-        num_planes, num_rows, num_cols = ConnectFourTensorMapping.get_game_info(states)
+        num_planes, num_rows, num_cols = ConnectFourQuantileTensorMapping.get_game_info(
+            states
+        )
 
         batch_tensors = []
         for state in states:
@@ -72,16 +73,10 @@ class ConnectFourTensorMapping(TensorMapping[int, ModelOutput]):
             tsds_eval: ModelOutput = {}
             for player in states[i].players:
                 if states[i].current_player == player:
-                    tsds_eval[player] = Distribution(
-                        quantile_values=value_dist_np,
-                        quantile_function="PL",
-                    )
+                    tsds_eval[player] = value_dist_np
                 else:
                     # Approximate negation for zero-sum games by flipping and negating quantiles
-                    tsds_eval[player] = Distribution(
-                        quantile_values=-value_dist_np[::-1].copy(),
-                        quantile_function="PL",
-                    )
+                    tsds_eval[player] = -value_dist_np[::-1].copy()
             result.append(tsds_eval)
         return result
 
@@ -90,17 +85,23 @@ class ConnectFourTensorMapping(TensorMapping[int, ModelOutput]):
         examples: List[TrainingExample[int, ModelOutput]],
         device: torch.device,
     ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
-        # We need to extract the distribution for the current player from the target dict
+        # NOTE: This method assumes targets are quantiles, but current DAZTrainingAdapter produces categorical probabilities.
+        # This class is kept for legacy/reference and is not compatible with the current extract_examples.
+
+        # If we were using quantiles, ex.target[...] would be the quantile array.
+        # But assuming the type matches (np.ndarray), we can just stack them.
+        # However, the MEANING is different.
+
         dist_array = np.array(
-            [ex.target[ex.state.current_player].quantile_values for ex in examples],
+            [ex.target[ex.state.current_player] for ex in examples],
             dtype=np.float32,
         )
         target = torch.from_numpy(dist_array).to(device)
         return {"value_distribution": target}, {}
 
 
-class LayeredConnectFourTensorMapping(ConnectFourTensorMapping):
-    """Tensor mapping compatible with Connect 4 (via OpenSpielState) and AlphaZero, but with a layered encoding useful for ResNets."""
+class LayeredConnectFourQuantileTensorMapping(ConnectFourQuantileTensorMapping):
+    """Layered version of ConnectFourQuantileTensorMapping."""
 
     @staticmethod
     def encode_states(
@@ -109,7 +110,9 @@ class LayeredConnectFourTensorMapping(ConnectFourTensorMapping):
         if not states:
             return torch.empty(0, device=device)
 
-        num_planes, num_rows, num_cols = ConnectFourTensorMapping.get_game_info(states)
+        num_planes, num_rows, num_cols = ConnectFourQuantileTensorMapping.get_game_info(
+            states
+        )
         result = torch.zeros(
             len(states), 3, num_rows, num_cols, dtype=torch.float32, device=device
         )
@@ -131,3 +134,65 @@ class LayeredConnectFourTensorMapping(ConnectFourTensorMapping):
                     num_rows, num_cols, dtype=torch.float32, device=device
                 )
         return result
+
+
+class ConnectFourCategoricalTensorMapping(ConnectFourQuantileTensorMapping):
+    """Tensor mapping compatible with Connect 4 and Distributional AlphaZero (Categorical)."""
+
+    @staticmethod
+    def decode_outputs(
+        outputs: Dict[str, torch.Tensor], states: List[OpenSpielState]
+    ) -> List[ModelOutput]:
+        # output is logits [B, n_categories]
+        logits = outputs["value_logits"].float()
+        # Convert to probabilities
+        probs = torch.softmax(logits, dim=1).detach().numpy()
+
+        result = []
+        for i in range(len(states)):
+            pdf = probs[i]
+            tsds_eval: ModelOutput = {}
+
+            for player in states[i].players:
+                if states[i].current_player == player:
+                    tsds_eval[player] = pdf
+                else:
+                    # Zero-sum negation: reverse the probability mass bins
+                    # Valid for symmetric support [-K, K]
+                    tsds_eval[player] = pdf[::-1].copy()
+
+            result.append(tsds_eval)
+        return result
+
+    @staticmethod
+    def encode_targets(
+        examples: List[TrainingExample[int, ModelOutput]],
+        device: torch.device,
+    ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
+        # extract_examples produces Dict[PlayerType, np.ndarray] (probabilities) in target
+        dist_list = []
+        for ex in examples:
+            target_pdf = ex.target[ex.state.current_player]  # np.ndarray
+            dist_list.append(target_pdf)
+
+        dist_array = np.array(dist_list, dtype=np.float32)
+        target = torch.from_numpy(dist_array).to(device)
+        return {"value_distribution": target}, {}
+
+
+class LayeredConnectFourCategoricalTensorMapping(ConnectFourCategoricalTensorMapping):
+    """Layered version of ConnectFourCategoricalTensorMapping."""
+
+    @staticmethod
+    def encode_states(
+        states: List[OpenSpielState], device: torch.device
+    ) -> torch.Tensor:
+        # Reuse the layered encoding from the quantile version (which reuses the helper or has its own)
+        # Actually LayeredConnectFourQuantileTensorMapping overrides encode_states.
+        # We can just call that implementation or copy it.
+        # Since we inherit from ConnectFourCategoricalTensorMapping (for decode/encode_targets),
+        # but we want encode_states from LayeredConnectFourQuantileTensorMapping.
+        # Multi-inheritance or composition?
+        # Or just call the static method of LayeredConnectFourQuantileTensorMapping explicitly.
+
+        return LayeredConnectFourQuantileTensorMapping.encode_states(states, device)
