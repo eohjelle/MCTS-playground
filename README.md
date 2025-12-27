@@ -1,6 +1,6 @@
 # MCTS Playground
 
-MCTS Playground is a modular Python framework for researching AlphaZero-style algorithms and other Monte Carlo Tree Search techniques. It ships with ready-to-use game environments, configurable search components, and utilities for running full training pipelines.
+MCTS Playground is an educational modular Python framework for AlphaZero-style algorithms and other Monte Carlo Tree Search techniques. It ships with ready-to-use game environments, configurable search components, and utilities for running full training pipelines.
 
 ## Overview
 
