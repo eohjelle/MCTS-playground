@@ -20,7 +20,7 @@ dependencies = [
     "numpy>=2.3.5",
     "pytest>=9.0.1",
 ]
-
+  
 [project.optional-dependencies]
 open_spiel = ["open_spiel"] # If not installing from source (as in install.sh)
 

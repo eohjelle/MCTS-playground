@@ -30,7 +30,7 @@ A short overview of our findings:
 - Traditional transformers seem to need a lot more parameters than other models.
 - A transformer with masked simple attention achieves minimal loss and perfect play with ~14k parameters.
 
-### Interpretability
+### Interpretability 
 
 Here are some images of attention masks for transformer with masked simple attention:
 
