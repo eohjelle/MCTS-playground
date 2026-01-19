@@ -14,7 +14,7 @@ The name `MCTS Playground` is intended to invoke the idea of playing around with
 
 ## Getting started
 
-There is a convenient script for setting upthe project using `uv`:
+There is a convenient script for setting up the project using `uv`:
 
 ```bash
 bash install.sh
