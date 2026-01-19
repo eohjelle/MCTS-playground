@@ -1,13 +1,10 @@
-# Create conda environment
-conda create -n mcts-playground python -y
+# Create virtual environment and install required python packages
+uv sync
 
-# Install required python packages
-conda run -n mcts-playground pip install -e .
-
-# Install open_spiel directly from source, pip installation does not always work
+# Install open_spiel directly from source, since pip installation does not always work
 git clone https://github.com/google-deepmind/open_spiel.git
 cd open_spiel
-conda run -n mcts-playground ./install.sh
-conda run -n mcts-playground pip install .
+./install.sh
 cd ..
+uv pip install ./open_spiel
 rm -rf open_spiel

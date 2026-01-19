@@ -9,7 +9,7 @@ version = "0.1.0"
 description = "Modular AlphaZero / MCTS research playground"
 authors = [{ name = "Eivind Otto Hjelle", email = "eohjelle@gmail.com" }]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 
 # Pure-Python or pip-friendly deps
 dependencies = [
@@ -17,6 +17,8 @@ dependencies = [
     "einops",
     "wandb",
     "absl-py",
+    "numpy>=2.3.5",
+    "pytest>=9.0.1",
 ]
 
 [project.optional-dependencies]

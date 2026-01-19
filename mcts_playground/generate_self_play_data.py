@@ -11,6 +11,7 @@ import torch.multiprocessing as multiprocessing
 from typing import Callable
 import time
 
+
 def self_play_actor(
     initial_state_creator: Callable[[], State],
     player_creator: Callable[[State], TreeAgent],
@@ -25,12 +26,15 @@ def self_play_actor(
             initial_state_creator,
             trajectory_player_creators=[player_creator] * num_players,
             num_games=1,
-            opponent_creators=[]
+            opponent_creators=[],
         )
         for trajectory in trajectories:
             examples += training_adapter.extract_examples(trajectory)
-        encoded_examples = tensor_mapping.encode_examples(examples, device=torch.device("cpu"))
+        encoded_examples = tensor_mapping.encode_examples(
+            examples, device=torch.device("cpu")
+        )
         queue.put(encoded_examples)
+
 
 def generate_self_play_data(
     initial_state_creator: Callable[[], State],
@@ -42,7 +46,19 @@ def generate_self_play_data(
 ):
     try:
         queue = multiprocessing.Queue()
-        processes = [multiprocessing.Process(target=self_play_actor, args=(initial_state_creator, player_creator, tensor_mapping, training_adapter, queue)) for _ in range(num_actors)]
+        processes = [
+            multiprocessing.Process(
+                target=self_play_actor,
+                args=(
+                    initial_state_creator,
+                    player_creator,
+                    tensor_mapping,
+                    training_adapter,
+                    queue,
+                ),
+            )
+            for _ in range(num_actors)
+        ]
         for process in processes:
             process.start()
         buffer = ReplayBuffer(max_size=num_examples, device=torch.device("cpu"))
@@ -52,8 +68,10 @@ def generate_self_play_data(
             while not queue.empty():
                 encoded_examples = queue.get()
                 buffer.add(*encoded_examples)
-                new_examples_count += encoded_examples[0].shape[0]    
-            print(f"Added {new_examples_count} examples to buffer. Current buffer size: {len(buffer)}. Examples per second: {new_examples_count / (time.time() - last_time)}")
+                new_examples_count += encoded_examples[0].shape[0]
+            print(
+                f"Added {new_examples_count} examples to buffer. Current buffer size: {len(buffer)}. Examples per second: {new_examples_count / (time.time() - last_time)}"
+            )
             last_time = time.time()
             time.sleep(10.0)
     except KeyboardInterrupt:
